@@ -15,7 +15,7 @@ settings.FORCE_FEATXTR = True
 settings.SPLIT_TRAINING_SET = False
 
 settings.extract_mean = True
-settings.extract_var  = True
+settings.extract_std  = True
 
 settings.SOUNDPATHS.update(
     {'Boa': {

@@ -12,6 +12,7 @@ from jinja2.loaders import FileSystemLoader
 from types import ModuleType, FunctionType
 
 from matplotlib import pyplot as plt
+from IPython.display import FileLink, display
 
 
 def mybasename(path):
@@ -69,7 +70,7 @@ def dump_report(variables, modelname):
 
     outfilename = make_output_filename(now.strftime("%Y_%m_%d__%H:%M:%S"),
                                        modelname, "simulationrun", "html")
-    print "dumping report to", outfilename
+    
     env = Environment(loader=FileSystemLoader('.', encoding='utf-8'))
     template = env.get_template('simulationrun.template')
     
@@ -88,6 +89,9 @@ def dump_report(variables, modelname):
     
     with open(outfilename, 'wb') as f:
         f.write(template.render(variables))
+        
+    print "dumping report to:" 
+    display(FileLink(outfilename.replace(" ", "\\ ")))
 
 
 def dump_to_pickle(obj, outfilename):

@@ -7,10 +7,6 @@ from abc import ABCMeta
 
 
 import settings
-if settings.PLOT:
-    import matplotlib
-    matplotlib.use(settings.MPL_BACKEND)
-    from matplotlib import pyplot as plt, cm
 
 
 import numpy as np
@@ -24,14 +20,14 @@ from sklearn.metrics import roc_auc_score, f1_score
 from sklearn.preprocessing import label_binarize
 from sklearn.cross_validation import train_test_split
 
-from features import mfcc
-from features import logfbank
+from features import mfcc, logfbank, fbank
 
 #from stowell.oskmeans import OSKmeans, normalise_and_whiten
 from stowell.oskmeans import OSKmeans, normalise_and_whiten
 
 
 from utils.confusion import ConfusionMatrix
+from utils.plot import classif_plot
 from utils import misc, signal as usignal
 
 mel_feat = None
@@ -39,7 +35,7 @@ mel_feat = None
 def aggregate_feature(feat, normalise):
         out_feat = []
         func = {np.nanmean:settings.extract_mean,
-                np.nanvar:settings.extract_var,
+                np.nanstd:settings.extract_std,
                 np.nanmax:settings.extract_max}
         func = [x for x in func.keys() if func[x]]
         
@@ -76,20 +72,26 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
         
     elif analyser == "mel-filterbank":
         
-        mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, nfilt=settings.N_MEL_FILTERS)), 
+        mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, 
+                                                  winlen=0.0232, winstep=0.0232,
+                                               nfilt=settings.N_MEL_FILTERS)), 
                            a_min=-100, a_max=100)
         
         
-        delta = 10.
+        delta = 0
         global slices
-        slices = np.empty((np.floor(mel_feat.shape[0] / delta), mel_feat.shape[1]*delta))
-        if np.floor(mel_feat.shape[0] / delta) == 0:
-            return None
-            
-        for i in range(0, slices.shape[0]):
-            
-            slices[i] = np.ravel(mel_feat[i*delta:i*delta+delta, :])
+        if delta > 0:
+                
+            slices = np.empty((np.floor(mel_feat.shape[0] / delta), mel_feat.shape[1]*delta))
+            if np.floor(mel_feat.shape[0] / delta) == 0:
+                return None
+                
+            for i in range(0, slices.shape[0]):
+                
+                slices[i] = np.ravel(mel_feat[i*delta:i*delta+delta, :])
         
+        else:
+            slices = mel_feat
         
         assert np.max(slices) <= 100
         assert np.min(slices) >= -100
@@ -129,7 +131,7 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
             oskm.update(datum)
 
         feat = np.hstack( (np.mean(oskm.centroids, axis=1), 
-                           np.var (oskm.centroids, axis=1)) )
+                           np.std (oskm.centroids, axis=1)) )
         
         assert feat.shape == (1000,)
         print()
@@ -263,7 +265,7 @@ class Classispecies(object):
         np.savetxt(misc.make_output_filename(filename, "", settings.modelname, "csv"), obj, delimiter=",",
                    fmt="%s", comments = '', header= ",".join(["label"] +
                                     #["mean%d" % x for x in range(settings.NMFCCS-1)] +
-                                    #["var%d"  % x for x in range(settings.NMFCCS-1)] +
+                                    #["std%d"  % x for x in range(settings.NMFCCS-1)] +
                                     ["max%d"  % x for x in range(settings.NMFCCS-1)] ))
   
 
@@ -416,15 +418,9 @@ class Classispecies(object):
         if settings.whiten_feature_matrix:
             data_training = whiten(data_training)
             data_testing  = whiten(data_testing)
-        
-        fig = plt.figure()
-        plt.pcolormesh(data_training, rasterized=True)
-        plt.autoscale(tight=True)
-        plt.xlabel("feature")
-        plt.ylabel("sound file")
-        outfilename = misc.make_output_filename("features", "featxtr", settings.modelname, settings.MPL_FORMAT)
-
-        misc.plot_or_show(fig, filename=outfilename)
+    
+        if settings.plots.get("feature_plot"):
+            feature_plot(data_training, settings.modelname, settings.MPL_FORMAT)
         
         return data_training, data_testing
 
@@ -457,7 +453,7 @@ class Classispecies(object):
             
 
             if settings.MULTILABEL:
-                if settings.CLASSIF_PLOT: self.classif_plot(labels_testing, self.prediction)
+                if settings.CLASSIF_PLOT: classif_plot(labels_testing, self.prediction)
                 
                 auc = roc_auc_score(labels_testing, self.prediction)
                 
@@ -497,44 +493,19 @@ class Classispecies(object):
             
             res = np.ravel(labels_testing) == np.ravel(self.prediction)
             f1  = f1_score(labels_testing, self.prediction)
+            total = np.sum(self.test_labels)
             self.results["f1"]  = f1
-            self.results["correct"] = np.sum(res)
-            self.results["total"]   = np.size(res)
-            self.results["correct_percent"] = np.sum(res)/float(np.size(res))*100
+            #self.results["correct"] = np.sum(res)
+            #self.results["total"]   = np.size(res)
+            #self.results["correct_percent"] = np.sum(res)/float(np.size(res))*100
+            self.results["correct"] = tp            
+            self.results["total"]   = total
+            self.results["correct_percent"] = float(tp)/total*100
             self.res = res
             
             print (colored("f1: %.3f" % f1, "green"))
             print ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
             print ("correct %d/%d (%.3f%%)" % (tp, int(np.sum(self.test_labels)), tp/np.sum(self.test_labels)*100))
-            
-    def classif_plot(self, labels_testing, prediction):
-                
-            print ("plotting classification plot")
-            fig = plt.figure(figsize=(15,7))
-            ax = fig.add_subplot(131)
-            ax.autoscale(tight=True)
-            ax.pcolormesh(labels_testing, rasterized=True)
-            ax.set_title("ground truth")
-            
-            ax = fig.add_subplot(132)
-            ax.autoscale(tight=True)
-            ax.pcolormesh(self.prediction, rasterized=True)
-            ax.set_title("prediction")
-            
-            ax = fig.add_subplot(133)
-            
-            img = ax.pcolormesh(labels_testing - prediction, cmap=cm.get_cmap('PiYG',3), rasterized=True)
-            cb = plt.colorbar(img, ax=ax)
-            cb.set_ticks([-1,0,1], False)
-            cb.set_ticklabels(["FP", "T", "FN"], False)
-            cb.update_ticks()
-            ax.autoscale(tight=True)
-            
-            print ("saving classification plot")
-        
-            # fig.savefig(misc.make_output_filename("classifplot", "classify", settings.modelname, settings.MPL_FORMAT), dpi=150)
-            outfilename = misc.make_output_filename("classifplot", "classify", settings.modelname, settings.MPL_FORMAT)
-            misc.plot_or_show(fig, filename=outfilename)
 
             
     def run(self):

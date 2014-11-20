@@ -23,7 +23,7 @@ settings.FORCE_FEATXTR = True
 settings.MULTILABEL = True
 
 settings.extract_mean = True
-settings.extract_var  = False
+settings.extract_std  = True
 
 settings.sec_segments = 1.
 
