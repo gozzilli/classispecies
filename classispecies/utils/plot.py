@@ -14,7 +14,7 @@ if settings.PLOT:
     from matplotlib import pyplot as plt, cm
 
 
-def classif_plot(self, labels_testing, prediction):
+def classif_plot(labels_testing, prediction):
             
     print ("plotting classification plot")
     fig = plt.figure(figsize=(15,7))
@@ -25,7 +25,7 @@ def classif_plot(self, labels_testing, prediction):
     
     ax = fig.add_subplot(132)
     ax.autoscale(tight=True)
-    ax.pcolormesh(self.prediction, rasterized=True)
+    ax.pcolormesh(prediction, rasterized=True)
     ax.set_title("prediction")
     
     ax = fig.add_subplot(133)

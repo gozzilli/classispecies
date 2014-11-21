@@ -1,10 +1,5 @@
 from classispecies import settings
 
-settings.modelname  = "nips4b"
-settings.classifier = "randomforest"
-settings.analyser   = "mel-filterbank" #"oskmeans" 
-
-
 settings.SOUNDPATHS.update({
     'Boa' :
         { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
@@ -18,12 +13,17 @@ settings.LABELS = {
         },
     }
 
+
+settings.modelname  = "nips4b"
+settings.classifier = "randomforest"
+settings.analyser   = "hertz-spectrum" #"oskmeans" 
+
 settings.SPLIT_TRAINING_SET = True
 settings.FORCE_FEATXTR = True
 settings.MULTILABEL = True
 
 settings.extract_mean = True
-settings.extract_std  = True
+settings.extract_std  = False
 
 settings.sec_segments = 1.
 

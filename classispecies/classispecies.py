@@ -20,127 +20,17 @@ from sklearn.metrics import roc_auc_score, f1_score
 from sklearn.preprocessing import label_binarize
 from sklearn.cross_validation import train_test_split
 
-from features import mfcc, logfbank, fbank
-
-#from stowell.oskmeans import OSKmeans, normalise_and_whiten
-from stowell.oskmeans import OSKmeans, normalise_and_whiten
-
-
+from featextr import exec_featextr
 from utils.confusion import ConfusionMatrix
-from utils.plot import classif_plot
-from utils import misc, signal as usignal
+from utils.plot import classif_plot, feature_plot
+from utils import misc
 
 mel_feat = None
+signal__ = None
 
-def aggregate_feature(feat, normalise):
-        out_feat = []
-        func = {np.nanmean:settings.extract_mean,
-                np.nanstd:settings.extract_std,
-                np.nanmax:settings.extract_max}
-        func = [x for x in func.keys() if func[x]]
-        
-        if normalise:
-            feat = usignal.rms_normalise(feat)
-    
-        for f in func:
-            
-            r = f(feat, axis=0)
-            if settings.whiten_feature:
-                r = whiten(r)
-            out_feat.append(r)
-            
-        feats = np.hstack(out_feat)
-        if settings.whiten_features:
-            feats = whiten(feats)
-        return feats
+max__ = 0
+max__file = ""
 
-def exec_featextr(soundfile, signal, rate, analyser, picklename,
-                  soundfile_counter, chunk_counter, n_soundfiles, 
-                  highpass_cutoff, normalise):
-    print( "\r[%d.%02d/%d] analysing %s\r" % (soundfile_counter+1, chunk_counter, n_soundfiles, os.path.basename(soundfile)), end="" )
-    sys.stdout.flush()
-    
-#    if highpass_cutoff > 0:
-#        signal = usignal.highpass_filter(signal[:], cutoff=highpass_cutoff)
-            
-    
-    if analyser == "mfcc":
-    
-        mfcc_feat = np.clip(np.nan_to_num(mfcc(signal, rate, numcep=settings.NMFCCS)), 
-                            a_min=-100, a_max=100)
-        feat = aggregate_feature(mfcc_feat, normalise)
-        
-    elif analyser == "mel-filterbank":
-        
-        mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, 
-                                                  winlen=0.0232, winstep=0.0232,
-                                               nfilt=settings.N_MEL_FILTERS)), 
-                           a_min=-100, a_max=100)
-        
-        
-        delta = 0
-        global slices
-        if delta > 0:
-                
-            slices = np.empty((np.floor(mel_feat.shape[0] / delta), mel_feat.shape[1]*delta))
-            if np.floor(mel_feat.shape[0] / delta) == 0:
-                return None
-                
-            for i in range(0, slices.shape[0]):
-                
-                slices[i] = np.ravel(mel_feat[i*delta:i*delta+delta, :])
-        
-        else:
-            slices = mel_feat
-        
-        assert np.max(slices) <= 100
-        assert np.min(slices) >= -100
-
-        feat = aggregate_feature(slices, normalise)
-        
-        
-        
-        
-    elif analyser == "hertz-spectrum":
-        hertz_feat = math.stft(signal, rate, 0.1, 0.01)
-        hertz_feat = 10*np.log10(hertz_feat.T[:len(hertz_feat.T)/2])
-        
-        hertz_feat = np.clip(np.nan_to_num(hertz_feat), a_min=-100, a_max=100)
-        
-        feat = aggregate_feature(hertz_feat, normalise)
-        
-    elif analyser == "oskmeans":
-        
-        delta = 4
-        k     = 500
-        
-        global mel_feat, new_mel_feat
-        mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, 
-                                                  lowfreq=500, 
-                                                  nfilt=settings.N_MEL_FILTERS)), 
-                           a_min=-100, a_max=100)
-        
-        
-        #info, nw = normalise_and_whiten(mel_feat)
-        nw = mel_feat
-        
-        
-        d = nw.shape[1]
-        oskm = OSKmeans(k, d)
-        for datum in nw:
-            oskm.update(datum)
-
-        feat = np.hstack( (np.mean(oskm.centroids, axis=1), 
-                           np.std (oskm.centroids, axis=1)) )
-        
-        assert feat.shape == (1000,)
-        print()
-        
-    else:
-        raise ValueError("Feature extraction method '%s' not known." % analyser)
-    
-    misc.dump_to_pickle(feat, picklename)
-    return feat
 
 class Classispecies(object):
     __metaclass__ = ABCMeta
@@ -332,9 +222,6 @@ class Classispecies(object):
             for signal in signals:
                 
                 if self.sec_segments and len(signal) < self.sec_segments * rate: 
-                    print ()
-                    print ("skipped chunk", chunk_counter)
-                    print ()
                     continue
             
                 ''' some stats '''
@@ -419,7 +306,7 @@ class Classispecies(object):
             data_training = whiten(data_training)
             data_testing  = whiten(data_testing)
     
-        if settings.plots.get("feature_plot"):
+        if settings.FEATURES_PLOT:
             feature_plot(data_training, settings.modelname, settings.MPL_FORMAT)
         
         return data_training, data_testing

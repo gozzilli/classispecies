@@ -47,7 +47,7 @@
 		<p>Classifier: <b>{{ classifier }}</b></p>
 		
 		<p>
-			Correct <b>{{correct}}</b> out of <b>{{ total }} ({{"%.3f" % correct_percent}}%)</b>.<br>
+			Correct <b>{{correct}}</b> out of <b>{{ "%d" % total }} ({{"%.3f" % correct_percent}}%)</b>.<br>
 			{% if tps is defined %}
 				TP: {{ tps }}<br>
 			{% endif %}

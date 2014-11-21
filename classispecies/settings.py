@@ -18,6 +18,7 @@ show            = False
 
 N_MEL_FILTERS   = 40
 highpass_cutoff = 500 ## set to 0 to disable high-pass filter
+delta           = 0
 normalise       = False
 n_segments      = None
 sec_segments    = None
