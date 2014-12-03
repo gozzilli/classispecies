@@ -12,7 +12,7 @@
 	<a href="#dataset">Dataset</a> |
 	<a href="#features">Features</a> |
 	<a href="#results">Results</a> |
-	<a href="#settings">Setting</a> 
+	<a href="#settings">Settings</a> 
 	
 	
 	<h3 id="dataset">Dataset</h3>
@@ -47,7 +47,9 @@
 		<p>Classifier: <b>{{ classifier }}</b></p>
 		
 		<p>
+                    {% if correct is defined and total is defined and correct_percent is defined %}
 			Correct <b>{{correct}}</b> out of <b>{{ "%d" % total }} ({{"%.3f" % correct_percent}}%)</b>.<br>
+                    {% endif %}
 			{% if tps is defined %}
 				TP: {{ tps }}<br>
 			{% endif %}
@@ -84,6 +86,10 @@
 		{% if output_plot %}
 			<img src="{{output_plot}}" style="max-width: 100%"/>
 		{% endif %}
+
+             {% if colored_res %}
+                <div>{{colored_res}}</div>
+             {% endif %}
 			
 			
 		

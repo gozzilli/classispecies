@@ -3,12 +3,13 @@ from classispecies import settings
 settings.SOUNDPATHS.update({
     'Boa' :
         { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
-          'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
+          'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/test',
         },
     })
 settings.LABELS = {
     'Boa' :
         { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
+#          'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
           'test'  : '',
         },
     }
@@ -16,16 +17,18 @@ settings.LABELS = {
 
 settings.modelname  = "nips4b"
 settings.classifier = "randomforest"
-settings.analyser   = "hertz-spectrum" #"oskmeans" 
+settings.analyser   = "mel-filterbank" #hertz-spectrum" #"oskmeans" 
 
-settings.SPLIT_TRAINING_SET = True
-settings.FORCE_FEATXTR = True
+settings.SPLIT_TRAINING_SET = False
+settings.FORCE_FEATXTR = False
 settings.MULTILABEL = True
+settings.MULTICORE  = False
 
 settings.extract_mean = True
 settings.extract_std  = False
 
-settings.sec_segments = 1.
+settings.sec_segments = None
+settings.n_segments   = None
 
 
 from classispecies.classispecies import Classispecies
@@ -38,15 +41,26 @@ class NipsModel(Classispecies):
         
 
     def dump_to_nips4b_submission(self):
-        with open(misc.make_output_filename("nips4b_bird2013_sidelil_1", "submission", settings.modelname, "csv"), 'w') as f:
+        with open(misc.make_output_filename("nips4b_bird2013_sidelil_2", "submission", settings.modelname, "csv"), 'w') as f:
             f.write("ID,Probability\n")
             nrow=1
-            for row in self.prediction:
+            for row in self.predict_proba:
                 ncol=1
                 for column in row:
                     f.write("nips4b_birds_testfile%04d.wav_classnumber_%d,%f\n" %(nrow, ncol, column))
                     ncol+=1
                 nrow+=1
+                
+#    def dump_to_nips4b_submission(self):
+#        with open(misc.make_output_filename("nips4b_bird2013_sidelil_2", "submission", settings.modelname, "csv"), 'w') as f:
+#            f.write("ID,Probability\n")
+#            nrow=1
+#            for row in self.prediction:
+#                ncol=1
+#                for column in row:
+#                    f.write("nips4b_birds_testfile%04d.wav_classnumber_%d,%f\n" %(nrow, ncol, column))
+#                    ncol+=1
+#                nrow+=1
         
 
 

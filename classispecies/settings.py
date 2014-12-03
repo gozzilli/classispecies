@@ -33,6 +33,7 @@ whiten_feature_matrix   = False
 SPLIT_TRAINING_SET  = False
 FORCE_FEATXTR       = False
 MULTILABEL          = True
+MULTICORE           = False
 
 
 MPL_FORMAT      = "svg"

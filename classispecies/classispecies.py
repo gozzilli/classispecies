@@ -12,6 +12,7 @@ import settings
 import numpy as np
 import scipy.io.wavfile as wav
 from multiprocessing import Pool, Manager, cpu_count, util as m_util
+from multiprocessing.pool import ApplyResult
 
 from scipy.cluster.vq import vq, whiten, kmeans
 from sklearn.ensemble import RandomForestClassifier
@@ -48,6 +49,9 @@ class Classispecies(object):
         self.train_soundfiles, self.test_soundfiles = self.list_soundfiles()
         
         self.train_labels, self.test_labels, self.classes = self.load_labels()
+        
+        self.missingTestLabels = not settings.SPLIT_TRAINING_SET and \
+            (self.test_labels == None or np.all(np.unique(self.test_labels) == np.array(None)))
 
         #self.nfeatures    = nfeatures    or settings.NFEATURES
         self.classifier   = classifier   or settings.classifier
@@ -178,22 +182,21 @@ class Classispecies(object):
         if labels == None:
             labels = [None for _ in range(len(soundfiles))]
             
-        global X
-            
-        X = [] ## (n_samples x n_features)
         new_labels = []
+        res = []
         
         soundfile_counter = 0
+        total_counter     = 0
+        chunk2soundfile   = {}
         
-#        print ("Starting pool of %d processes" % (cpu_count()))
-#        pool = Pool(processes=cpu_count())
-#        manager = Manager()
-#        q = manager.Queue()
-            
+        if settings.MULTICORE:
+            print ("Starting pool of %d processes" % (cpu_count()))
+            pool = Pool(processes=cpu_count())
+
         for soundfile, lab in zip(soundfiles, labels):
         
-            print( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
-            sys.stdout.flush()
+#            print( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
+#            sys.stdout.flush()
             
             (rate,signal_all) = wav.read(soundfile)
             
@@ -244,42 +247,58 @@ class Classispecies(object):
                     
                     is_analysing = True
                     
-                    feat = exec_featextr(soundfile, signal, rate, self.analyser, picklename,
+                    if settings.MULTICORE:
+                        res.append( pool.apply_async(exec_featextr, 
+                                        [soundfile, signal, rate, self.analyser, picklename,
                                          soundfile_counter, chunk_counter, len(soundfiles), 
-                                         self.highpass_cutoff, self.normalise)
-                    
-                    if feat == None:
-                        print ()
-                        print ("chunk", chunk_counter, "None")
-                        print ()
-                        continue
-                                         
-                    ## this is the multiprocessing alternative, which needs to
-                    ## be completed.
-                    #results.append( pool.apply_async(exec_featextr) ) ## add parameters
-                    
+                                         self.highpass_cutoff, self.normalise]) )
+                    else:
+                        res.append( exec_featextr(soundfile, signal, rate, self.analyser, picklename,
+                                         soundfile_counter, chunk_counter, len(soundfiles), 
+                                         self.highpass_cutoff, self.normalise) )
                       
                 else:
                     print( "\r[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ), end="" )
                     is_analysing = False
-                    feat = misc.load_from_pickle(picklename)
+                    res.append(misc.load_from_pickle(picklename))
              
+                chunk2soundfile[total_counter] = soundfile
                 chunk_counter += 1
+                total_counter += 1
+                
+                new_labels.append(lab)
                 ### end signals loop
                 
-                X.append(feat)
-                new_labels.append(lab)
-        
-            print( "\r[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename) ), end="\n" )
+            print( "\r[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename) ), end="" )
             sys.stdout.flush()
             
             soundfile_counter += 1
             ### end soundfiles loop
+            
+            
+        if settings.MULTICORE:
+            pool.close()
+            pool.join()
+        
+            
+        X = [] ## (n_samples x n_features)
+        for x in res:
+            
+            if isinstance(x, ApplyResult):
+                x = x.get()
+
+            if x == None: continue
+            
+            X.append(x)
+
+        
         X = np.vstack(X)
         new_labels = np.vstack(new_labels)
 
         assert X.shape[0] == new_labels.shape[0]
         print()
+        
+        self.chunk2soundfile = chunk2soundfile
         
         return X, new_labels
     
@@ -335,14 +354,21 @@ class Classispecies(object):
        
         
         self.prediction = clf.predict(data_testing)#.reshape(len(data_testing),1)
+        self.predict_logproba = clf.predict_log_proba(data_testing)
+        self.predict_proba = np.array(clf.predict_proba(data_testing))
         
-        if labels_testing != None:
+        if settings.MULTILABEL:
+            self.predict_proba = self.predict_proba[:,:,1].T
+        else:
+            self.predict_proba = self.predict_proba.T
+        
+        if not self.missingTestLabels:
             
 
             if settings.MULTILABEL:
                 if settings.CLASSIF_PLOT: classif_plot(labels_testing, self.prediction)
                 
-                auc = roc_auc_score(labels_testing, self.prediction)
+                auc = roc_auc_score(labels_testing, self.predict_proba)
                 
                 tp = np.sum((labels_testing + self.prediction) == 2)
                 fp = np.sum((labels_testing - self.prediction) == -1)
@@ -365,34 +391,50 @@ class Classispecies(object):
                 print ("prediction:")
                 print (self.prediction)
                 confusion = ConfusionMatrix(self.classes)
+                res_colored = ""
                 for true, pred in zip(labels_testing, self.prediction):
                 #for true, pred in np.hstack((labels_testing, self.prediction)):
                     print (colored("true %s, predicted %s" % (true, pred), "green" if true == pred else "red"))
+                    res_colored += "<span style='color: %s;'>true %s, predicted %s</span><br>" % ("green" if true == pred else "red", true, pred)
                     confusion.add(str(true), str(pred))
-                    
+                
+                self.results["colored_res"] = res_colored
                 if settings.CONFUSION_PLOT:
                     print (confusion)
                     confusion.plot(outputname=misc.make_output_filename("confusion", "", settings.modelname, settings.MPL_FORMAT))
                 self.results["confusion_matrix"] = confusion.html()
                 self.confusion = confusion
                 
-                
             
             res = np.ravel(labels_testing) == np.ravel(self.prediction)
-            f1  = f1_score(labels_testing, self.prediction)
-            total = np.sum(self.test_labels)
-            self.results["f1"]  = f1
-            #self.results["correct"] = np.sum(res)
-            #self.results["total"]   = np.size(res)
-            #self.results["correct_percent"] = np.sum(res)/float(np.size(res))*100
-            self.results["correct"] = tp            
-            self.results["total"]   = total
-            self.results["correct_percent"] = float(tp)/total*100
             self.res = res
             
+            f1  = f1_score(labels_testing, self.prediction)
+            self.results["f1"]  = f1            
             print (colored("f1: %.3f" % f1, "green"))
+            
+            if settings.MULTILABEL:
+                total = np.sum(self.test_labels)
+
+                self.results["correct"] = tp            
+                self.results["total"]   = total
+                self.results["correct_percent"] = float(tp)/total*100
+                
+#                print ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
+#                print ("correct %d/%d (%.3f%%)" % (tp, int(np.sum(self.test_labels)), tp/np.sum(self.test_labels)*100))
+
+            else:
+                total = len(self.test_labels)
+                self.results["correct"] = np.sum(res)
+                self.results["total"]   = np.size(res)
+                self.results["correct_percent"] = np.sum(res)/float(np.size(res))*100
+                
+                
+
             print ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
-            print ("correct %d/%d (%.3f%%)" % (tp, int(np.sum(self.test_labels)), tp/np.sum(self.test_labels)*100))
+                
+            
+            
 
             
     def run(self):
@@ -426,7 +468,11 @@ class Classispecies(object):
             self.train_labels, self.test_labels = train_test_split(data_training, 
                                                                    self.train_labels,
                                                                    test_size=test_size, random_state=88)
-        
+                                                                   
+            self.total_sound_length *= test_size
+            self.results["n_train_files"] = len(self.train_labels)
+            self.results["n_test_files"] = len(self.test_labels)
+            
             #data_testing, self.test_labels = data_training, self.train_labels
             #print (colored ("[%s] skipping test files (splitting training set)" % settings.analyser, "red"))
         
@@ -444,8 +490,14 @@ class Classispecies(object):
         
         self.data_training, self.data_testing = data_training, data_testing
         self.results.update({"nsamples"  : data_training.shape[0],
-                             "nfeatures" : data_training.shape[1],
-                             "items_to_classify" : np.sum(self.test_labels) })
+                             "nfeatures" : data_training.shape[1], })
+        if not self.missingTestLabels:
+            if settings.MULTILABEL:
+                self.results["items_to_classify"] = np.sum(self.test_labels)
+            else:
+                self.results["items_to_classify"] = len(data_testing)                
+            
+            
         
         
         # CODE HAS CHANGED. EXPORT FOR AZURE NEEDS ADJUSTING AND TESTING  

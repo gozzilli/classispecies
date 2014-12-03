@@ -5,7 +5,6 @@ Created on Fri Nov 21 11:44:16 2014
 @author: Davide Zilli
 """
 
-
 from __future__ import print_function
 
 import sys, os
@@ -19,29 +18,50 @@ from stowell.oskmeans import OSKmeans, normalise_and_whiten
 import settings
 from utils import misc, signal as usignal
 
-def aggregate_feature(feat, normalise):
-        out_feat = []
-        func = {np.nanmean:settings.extract_mean,
-                np.nanstd:settings.extract_std,
-                np.nanmax:settings.extract_max}
-        func = [x for x in func.keys() if func[x]]
-        
-        if normalise:
-            feat = usignal.rms_normalise(feat)
+
+def aggregate_feature(feat, normalise=False):
+    ''' Take any combination of mean, std and max of the given features
     
-        for f in func:
-            
-            r = f(feat, axis=0)
-            if settings.whiten_feature:
-                r = whiten(r)
-            out_feat.append(r)
-            
-        feats = np.hstack(out_feat)
-        if settings.whiten_features:
-            feats = whiten(feats)
-        return feats
+    according to the parameters in settings. 
+    
+    Args
+        feat             -- the 2D array of features
+        normalise (bool) -- normalise or not?
+        
+    Return
+        a horizontally stacked vector (1-row array) such as:
+        [mean1 mean2 mean3 var1 var2 var3 max1 max2 max3]
+        
+    '''
+    
+    out_feat = []
+    func = {np.nanmean:settings.extract_mean,
+            np.nanstd:settings.extract_std,
+            np.nanmax:settings.extract_max}
+    func = [x for x in func.keys() if func[x]]
+    
+    if normalise:
+        feat = usignal.rms_normalise(feat)
+
+    for f in func:
+        
+        r = f(feat, axis=0)
+        if settings.whiten_feature:
+            r = whiten(r)
+        out_feat.append(r)
+        
+    feats = np.hstack(out_feat)
+    if settings.whiten_features:
+        feats = whiten(feats)
+    return feats
         
 def slice_spectrum(feat, delta):
+    '''
+    Stack the spectrum in slices, such that `delta` consecutive slices 
+    appear as one row. 
+    
+    If `delta` is 0, return the input spectrum.
+    '''
     
     if delta > 0:
             
@@ -66,17 +86,23 @@ def extract_mfcc(signal, rate, normalise):
     
 def extract_mel(signal, rate, normalise):
 
-    global mel_feat, slices
+#    global mel_feat, slices, mf, mfb, signal2
+#    signal2 = signal
     
-    mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, 
-                                              winlen=0.0232, winstep=0.0232,
-                                           nfilt=settings.N_MEL_FILTERS)), 
+#    mf = fbank(signal, rate, lowfreq=500, 
+#                                              winlen=0.0232, winstep=0.0232,
+#                                           nfilt=settings.N_MEL_FILTERS)
+#    mel_feat = np.nan_to_num(mf[0])
+    mfb = logfbank(signal, rate, lowfreq=500, 
+#                                              winlen=0.0232, winstep=0.0232,
+                                           nfilt=26)#settings.N_MEL_FILTERS)
+    mel_feat = np.clip(np.nan_to_num(mfb), 
                        a_min=-100, a_max=100)            
     
     slices = slice_spectrum(mel_feat, settings.delta)
     
-    assert np.max(slices) <= 100
-    assert np.min(slices) >= -100
+#    assert np.max(slices) <= 100
+#    assert np.min(slices) >= -100
 
     feat = aggregate_feature(slices, normalise)
     return feat
@@ -156,8 +182,8 @@ def extract_oskmeans(signal, rate, normalise):
 def exec_featextr(soundfile, signal, rate, analyser, picklename,
                   soundfile_counter, chunk_counter, n_soundfiles, 
                   highpass_cutoff, normalise):
-    print( "\r[%d.%02d/%d] analysing %s\r" % (soundfile_counter+1, chunk_counter, 
-                              n_soundfiles, os.path.basename(soundfile)), end="" )
+    print( "\r[%d.%02d/%d] [pid:%d] analysing %s\r" % (soundfile_counter+1, chunk_counter, 
+                              n_soundfiles, os.getpid(), os.path.basename(soundfile)), end="" )
     sys.stdout.flush()
     
 #    if highpass_cutoff > 0:
