@@ -1,4 +1,4 @@
-import os, sys, socket
+import os
 
 modelname  = "default"
 classifier = "decisiontree"
@@ -19,6 +19,7 @@ show            = False
 N_MEL_FILTERS   = 40
 highpass_cutoff = 500 ## set to 0 to disable high-pass filter
 delta           = 0
+test_size       = 0.5
 normalise       = False
 n_segments      = None
 sec_segments    = None
@@ -29,8 +30,11 @@ whiten_feature          = False
 whiten_features         = False
 whiten_feature_matrix   = False
 
+logger_level   = "INFO"
+
 
 SPLIT_TRAINING_SET  = False
+SPLIT_METHOD        = "split-after"
 FORCE_FEATXTR       = False
 MULTILABEL          = True
 MULTICORE           = False
@@ -38,9 +42,7 @@ MULTICORE           = False
 
 MPL_FORMAT      = "svg"
 MPL_BACKEND     = "agg"
-if PLOT:
-    import matplotlib
-    matplotlib.use(MPL_BACKEND)
+
 
 _here = os.path.dirname(os.path.abspath(__file__))
 SOUNDPATHS = {"default"        : os.path.join(_here, "../../Resources/birds/")}

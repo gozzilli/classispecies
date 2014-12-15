@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
-import os, sys
+import os
 from termcolor import colored
 from abc import ABCMeta
+from collections import OrderedDict
+from pprint import pprint
 
 
 import settings
@@ -11,26 +13,35 @@ import settings
 
 import numpy as np
 import scipy.io.wavfile as wav
-from multiprocessing import Pool, Manager, cpu_count, util as m_util
+from multiprocessing import Pool, cpu_count
 from multiprocessing.pool import ApplyResult
 
-from scipy.cluster.vq import vq, whiten, kmeans
+from scipy.cluster.vq import whiten
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import roc_auc_score, f1_score
 from sklearn.preprocessing import label_binarize
 from sklearn.cross_validation import train_test_split
 
-from featextr import exec_featextr
+from featextr import exec_featextr, FeatureSet
 from utils.confusion import ConfusionMatrix
 from utils.plot import classif_plot, feature_plot
 from utils import misc
+from utils.misc import rprint
 
 mel_feat = None
 signal__ = None
 
 max__ = 0
 max__file = ""
+
+IMPORTANT = "blue"
+WARNING   = "red"
+RESULT    = "green"
+POSITIVE  = "green"
+NEGATIVE  = "red"
+
+logger = misc.config_logging("classispecies")
 
 
 class Classispecies(object):
@@ -69,7 +80,7 @@ class Classispecies(object):
         self.results = {"analyser"      : self.analyser,
                         "classifier"    : self.classifier,
                         "n_train_files" : len(self.train_soundfiles),
-                        "n_test_files"  : len(self.test_soundfiles) if self.test_soundfiles else 0,
+                        "n_test_files"  : len(self.test_soundfiles) if self.test_soundfiles != None else 0,
                         "n_chunks"      : "%s sec" % self.sec_segments if self.sec_segments else "%s" % self.n_segments
                         }
         
@@ -87,8 +98,6 @@ class Classispecies(object):
         train_label_path = misc.get_path(settings.LABELS, "train")
         test_label_path  = misc.get_path(settings.LABELS, "test")
         
-        print(settings.MULTILABEL , os.path.exists(train_label_path) , train_label_path)
-        print(settings.MULTILABEL and os.path.exists(train_label_path) and train_label_path)
         if settings.MULTILABEL and os.path.exists(train_label_path) and train_label_path:
             train_labels = np.loadtxt(train_label_path, delimiter=",")
             if max_row == None: max_row = train_labels.shape[0]
@@ -125,9 +134,8 @@ class Classispecies(object):
         
         def extract(set_):
             soundfiles = []
-            print (misc.get_soundpath(set_=set_))
             for root, subFolders, files in os.walk(misc.get_soundpath(set_=set_)):
-                print ("selecting files in", root)
+                logger.info ("selecting files in %s" % root)
                 
                 for file_ in files:
                     #if any(animal in file_ for animal in settings.CLASSES):
@@ -150,7 +158,7 @@ class Classispecies(object):
             
         #basesoundfiles = [os.path.basename(x) for x in soundfiles]
         
-        return train_soundfiles, test_soundfiles
+        return np.array(train_soundfiles), np.array(test_soundfiles)
     
     
     def savedata(self, filename, obj):
@@ -162,7 +170,161 @@ class Classispecies(object):
                                     #["std%d"  % x for x in range(settings.NMFCCS-1)] +
                                     ["max%d"  % x for x in range(settings.NMFCCS-1)] ))
   
+        
+    def featxtr3(self):
+        
+        if settings.SPLIT_TRAINING_SET:
 
+            logger.warn (colored("Splitting training set for train/test data (%.2f)" % settings.test_size, WARNING))
+            
+            cut = settings.test_size
+            nsamples = len(self.train_soundfiles)
+            indices = np.random.permutation(nsamples)
+            idx_tr, idx_te = indices[:cut*nsamples], indices[cut*nsamples:]
+            
+            self.test_soundfiles  = self.train_soundfiles[idx_te]             
+            self.train_soundfiles = self.train_soundfiles[idx_tr]
+            
+            self.test_labels  = self.train_labels[idx_te,:]
+            self.train_labels = self.train_labels[idx_tr,:]
+            
+            self.unchunked_test_labels = self.test_labels.copy()
+            
+
+        
+        ### TRAINING SET ######################################################
+            
+        logger.info (colored ("[%s] analysing training files..." % settings.analyser, IMPORTANT))
+        
+        train_fs = FeatureSet()
+        train_fs.extract(self.train_soundfiles, self.train_labels, self.analyser, 
+                         self.highpass_cutoff, self.normalise, 
+                         self.n_segments, self.sec_segments)
+        
+
+        ### TE$T SET ##########################################################
+        
+        logger.info (colored ("[%s] analysing testing files..." % settings.analyser, IMPORTANT))
+
+        test_fs = FeatureSet()
+        test_fs.extract(self.test_soundfiles, self.test_labels, self.analyser, 
+                        self.highpass_cutoff, self.normalise, 
+                        self.n_segments, self.sec_segments)
+                        
+
+        self.results.update({
+            "min_sound_length_train" : train_fs.min_length,
+            "max_sound_length_train" : train_fs.max_length,
+            "avg_sound_length_train" : train_fs.avg_length,
+            "n_train_files"          : len(train_fs),
+            "min_sound_length_test"  : test_fs.min_length,
+            "max_sound_length_test"  : test_fs.max_length,
+            "avg_sound_length_test"  : test_fs.avg_length,
+            "n_test_files"           : len(test_fs),
+            })
+            
+        pprint (self.results)
+        print (len(train_fs.db.truth), len(test_fs.db.truth))
+        
+        
+        return train_fs, test_fs
+
+    def featxtr2(self):
+        
+        ### TRAINING SET ######################################################
+            
+        logger.info (colored ("[%s] analysing training files..." % settings.analyser, IMPORTANT))
+        self.total_sound_length, self.min_sound_length, self.max_sound_length = 0, np.inf, 0
+        
+        data_training, self.train_labels, train_c2s = self.featxtr(self.train_soundfiles, self.train_labels)
+        
+        self.results["min_sound_length_train"] = self.min_sound_length
+        self.results["max_sound_length_train"] = self.max_sound_length
+        self.results["avg_sound_length_train"] = self.total_sound_length / self.train_labels.shape[0]
+        
+
+        ### TEST SET ##########################################################        
+        if settings.SPLIT_TRAINING_SET:
+            
+            logger.warn (colored("Splitting training set for train/test data (%.2f)" % settings.test_size, WARNING))
+            
+            data_training, data_testing,\
+            self.train_labels, self.test_labels = train_test_split(data_training, 
+                                                                   self.train_labels,
+                                                                   test_size=settings.test_size, random_state=88)
+                                                                   
+            self.total_sound_length *= settings.test_size
+            self.results["n_train_files"] = len(self.train_labels)
+            self.results["n_test_files"] = len(self.test_labels)
+            
+        else:
+
+            logger.info (colored ("[%s] analysing testing files..." % settings.analyser, IMPORTANT))
+            self.total_sound_length, self.min_sound_length, self.max_sound_length = 0, np.inf, 0
+            data_testing, self.test_labels, self.test_c2s  = self.featxtr(self.test_soundfiles, self.test_labels)
+
+        self.results["min_sound_length_test"] = self.min_sound_length
+        self.results["max_sound_length_test"] = self.max_sound_length
+        self.results["avg_sound_length_test"] = self.total_sound_length / self.test_labels.shape[0]
+        
+        return data_training, data_testing, self.train_labels, self.test_labels
+        
+    def featxtr4(self):            
+
+        
+        ### TRAINING SET ######################################################
+            
+        logger.info (colored ("[%s] analysing training files..." % settings.analyser, IMPORTANT))
+        
+        train_fs = FeatureSet()
+        train_fs.extract(self.train_soundfiles, self.train_labels, self.analyser, 
+                         self.highpass_cutoff, self.normalise, 
+                         self.n_segments, self.sec_segments)
+
+        if settings.SPLIT_TRAINING_SET:
+
+            logger.warn (colored("Splitting training set for train/test data (%.2f)" % settings.test_size, WARNING))
+
+            cut = settings.test_size
+            print ("\n\n\nSPLITTING\n\n")
+            train_fs, test_fs, self.train_soundfiles, self.test_soundfiles = train_fs.split(self.train_soundfiles, cut)
+            
+            u = OrderedDict()
+            for soundfile, _, _, lab in test_fs.db:
+                u[soundfile] = lab
+            self.unchunked_test_labels = np.array(u.values())
+            print ("len: utl:", self.unchunked_test_labels.shape)
+        else:
+            logger.info (colored ("[%s] analysing testing files..." % settings.analyser, IMPORTANT))
+            test_fs = FeatureSet()
+            test_fs.extract(self.test_soundfiles, self.test_labels, self.analyser, 
+                            self.highpass_cutoff, self.normalise, 
+                            self.n_segments, self.sec_segments)
+            
+        
+
+        ### TE$T SET ##########################################################
+        
+        
+
+        
+        self.results.update({
+            "min_sound_length_train" : train_fs.min_length,
+            "max_sound_length_train" : train_fs.max_length,
+            "avg_sound_length_train" : train_fs.avg_length,
+            "n_train_files"          : len(train_fs),
+            "min_sound_length_test"  : test_fs.min_length,
+            "max_sound_length_test"  : test_fs.max_length,
+            "avg_sound_length_test"  : test_fs.avg_length,
+            "n_test_files"           : len(test_fs),
+            })
+            
+        pprint (self.results)
+        print (len(train_fs.db.truth), len(test_fs.db.truth))
+
+        return train_fs, test_fs
+        
+        
     def featxtr(self, soundfiles, labels):
         
         ''' extract features from a list of sound files.
@@ -178,6 +340,9 @@ class Classispecies(object):
             X (2d-array):           extracted features
         
         '''
+        
+        
+        
 
         if labels == None:
             labels = [None for _ in range(len(soundfiles))]
@@ -187,15 +352,15 @@ class Classispecies(object):
         
         soundfile_counter = 0
         total_counter     = 0
-        chunk2soundfile   = {}
+        chunk2soundfile   = []
         
         if settings.MULTICORE:
-            print ("Starting pool of %d processes" % (cpu_count()))
+            logger.info ("Starting pool of %d processes" % (cpu_count()))
             pool = Pool(processes=cpu_count())
 
         for soundfile, lab in zip(soundfiles, labels):
         
-#            print( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
+#            logger.info( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
 #            sys.stdout.flush()
             
             (rate,signal_all) = wav.read(soundfile)
@@ -217,15 +382,18 @@ class Classispecies(object):
             else:
                 signals = np.array([signal_all])
                 
-            # print ("signals:", signals)
-            # print ("secs:", secs)
-            # print ("sec per signal:", ", ".join(map(str, [len(x) for x in signals])))
+            # logger.info ("signals:", signals)
+            # logger.info ("secs:", secs)
+            # logger.info ("sec per signal:", ", ".join(map(str, [len(x) for x in signals])))
             
             chunk_counter = 0
             for signal in signals:
+            
                 
                 if self.sec_segments and len(signal) < self.sec_segments * rate: 
                     continue
+                
+                chunk2soundfile.append(soundfile_counter)
             
                 ''' some stats '''
                 
@@ -258,19 +426,17 @@ class Classispecies(object):
                                          self.highpass_cutoff, self.normalise) )
                       
                 else:
-                    print( "\r[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ), end="" )
+                    rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
                     is_analysing = False
                     res.append(misc.load_from_pickle(picklename))
              
-                chunk2soundfile[total_counter] = soundfile
                 chunk_counter += 1
                 total_counter += 1
                 
                 new_labels.append(lab)
                 ### end signals loop
                 
-            print( "\r[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename) ), end="" )
-            sys.stdout.flush()
+            rprint("[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename)[-30:] ) )
             
             soundfile_counter += 1
             ### end soundfiles loop
@@ -296,11 +462,11 @@ class Classispecies(object):
         new_labels = np.vstack(new_labels)
 
         assert X.shape[0] == new_labels.shape[0]
-        print()
+        logger.info("")
         
-        self.chunk2soundfile = chunk2soundfile
+        assert len(chunk2soundfile) == total_counter
         
-        return X, new_labels
+        return X, new_labels, chunk2soundfile
     
         
     def export_for_azure(self, X, labels, n_soundfiles):
@@ -320,7 +486,8 @@ class Classispecies(object):
         
     def preprocess(self, data_training, data_testing):
         
-        print ("training shape: ", data_training.shape)
+        logger.info ("training shape: %s" % str(data_training.shape))
+        logger.info ("test shape    : %s" % str(data_testing.shape))
         if settings.whiten_feature_matrix:
             data_training = whiten(data_training)
             data_testing  = whiten(data_testing)
@@ -361,6 +528,21 @@ class Classispecies(object):
             self.predict_proba = self.predict_proba[:,:,1].T
         else:
             self.predict_proba = self.predict_proba.T
+            
+        c = OrderedDict()                
+        for i in range(len(self.test_fs)):
+
+            j = self.test_fs.db.soundfile[i]
+            if j in c:
+                c[j].append(self.predict_proba[i])
+            else:
+                c[j] = [self.predict_proba[i]]
+        
+        res_ = []
+        for v in c.values():
+            res_.append(np.mean(v, axis=0))
+        self.c = np.array(c.values())
+        self.res_ = np.array(res_)
         
         if not self.missingTestLabels:
             
@@ -368,15 +550,16 @@ class Classispecies(object):
             if settings.MULTILABEL:
                 if settings.CLASSIF_PLOT: classif_plot(labels_testing, self.prediction)
                 
+                
                 auc = roc_auc_score(labels_testing, self.predict_proba)
                 
                 tp = np.sum((labels_testing + self.prediction) == 2)
                 fp = np.sum((labels_testing - self.prediction) == -1)
                 fn = np.sum((labels_testing - self.prediction) == 1)
-                print (colored("ROC AUC: %.3f" % auc, "green"))
-                print ("TP:", tp)
-                print ("FP:", fp)
-                print ("FN:", fn)
+                logger.info (colored("ROC AUC: %.3f" % auc, RESULT))
+                logger.info ("TP: %d" % tp)
+                logger.info ("FP: %d" % fp)
+                logger.info ("FN: %d" % fn)
                 self.results["auc"] = auc
                 self.results["tps"] = tp
                 self.results["fps"] = fp
@@ -384,23 +567,17 @@ class Classispecies(object):
                 
             else: # single label
                 
-                print ("classes:")
-                print (self.classes)
-                print ("test labels:")
-                print (labels_testing)
-                print ("prediction:")
-                print (self.prediction)
                 confusion = ConfusionMatrix(self.classes)
                 res_colored = ""
                 for true, pred in zip(labels_testing, self.prediction):
-                #for true, pred in np.hstack((labels_testing, self.prediction)):
-                    print (colored("true %s, predicted %s" % (true, pred), "green" if true == pred else "red"))
-                    res_colored += "<span style='color: %s;'>true %s, predicted %s</span><br>" % ("green" if true == pred else "red", true, pred)
+
+                    logger.debug (colored("true %s, predicted %s" % (true, pred), POSITIVE if true == pred else NEGATIVE))
+                    res_colored += "<span style='color: %s;'>true %s, predicted %s</span><br>" % (POSITIVE if true == pred else NEGATIVE, true, pred)
                     confusion.add(str(true), str(pred))
                 
                 self.results["colored_res"] = res_colored
                 if settings.CONFUSION_PLOT:
-                    print (confusion)
+                    logger.debug (confusion)
                     confusion.plot(outputname=misc.make_output_filename("confusion", "", settings.modelname, settings.MPL_FORMAT))
                 self.results["confusion_matrix"] = confusion.html()
                 self.confusion = confusion
@@ -411,7 +588,7 @@ class Classispecies(object):
             
             f1  = f1_score(labels_testing, self.prediction)
             self.results["f1"]  = f1            
-            print (colored("f1: %.3f" % f1, "green"))
+            logger.info (colored("f1: %.3f" % f1, RESULT))
             
             if settings.MULTILABEL:
                 total = np.sum(self.test_labels)
@@ -431,9 +608,24 @@ class Classispecies(object):
                 
                 
 
-            print ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
+            logger.info ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
+                
+            ### Recombine the chunks
+#            c = np.ones ( (len(self.test_soundfiles), labels_testing.shape[1]) ) 
+#            c = OrderedDict()                
+#            self.c = c
+#            #print ("Shape of c:", c.shape)
+#            for i in range(len(self.test_fs)):
+#                j = self.test_fs.db.soundfile_counter[i]
+#                #print (i,j, self.test_fs.db.soundfile[i][-10:])
+#                if j in c:
+#                    c[j] *= self.predict_proba[i]
+#                else:
+#                    c[j] = self.predict_proba[i]
+#            self.c = np.array(c.values())
                 
             
+            logger.info (colored("ROC AUC merged: %.3f" % roc_auc_score(self.unchunked_test_labels, self.res_), RESULT))
             
 
             
@@ -447,45 +639,39 @@ class Classispecies(object):
             
         '''
         
-        print (colored ("\nstarting %s" % type(self).__name__, "red"))
-        print ("classes are:", settings.CLASSES)
-                    
-        print (colored ("[%s] analysing training files..." % settings.analyser, "red"))
-        self.total_sound_length, self.min_sound_length, self.max_sound_length = 0, np.inf, 0
-        data_training, self.train_labels = self.featxtr(self.train_soundfiles, self.train_labels)
-        self.results["min_sound_length_train"] = self.min_sound_length
-        self.results["max_sound_length_train"] = self.max_sound_length
-        self.results["avg_sound_length_train"] = self.total_sound_length / self.train_labels.shape[0]
+        logger.info  (colored ("\nstarting %s" % type(self).__name__, IMPORTANT))
+        logger.debug ("classes are: %s" % settings.CLASSES)
         
-        
-        if settings.SPLIT_TRAINING_SET:
+
+
+        ### FEATURE EXTRACTION ################################################
+
+        if settings.SPLIT_METHOD == "split-after":
+            print ("split after (feaxtr4)")
+            #data_training, data_testing, self.train_labels, self.test_labels = self.featxtr2()
+            train_fs, test_fs = self.featxtr4()
+            data_training, data_testing, self.train_labels, self.test_labels = \
+                train_fs.data, test_fs.data, train_fs.db.truth, test_fs.db.truth
+            self.test_fs = test_fs
+
+
+        elif settings.SPLIT_METHOD in ["split-before", None]:        
+            print ("split before (feaxtr3)")
+            train_fs, test_fs = self.featxtr3()
+            train_data, train_labs = train_fs.data, train_fs.db.truth
+            test_data,  test_labs  = test_fs.data,  test_fs.db.truth
             
-            test_size = 0.5
-            
-            print (colored("WARNING: Splitting training set for train/test data (%.2f)" % test_size, "red"))
-            
-            data_training, data_testing,\
-            self.train_labels, self.test_labels = train_test_split(data_training, 
-                                                                   self.train_labels,
-                                                                   test_size=test_size, random_state=88)
-                                                                   
-            self.total_sound_length *= test_size
-            self.results["n_train_files"] = len(self.train_labels)
-            self.results["n_test_files"] = len(self.test_labels)
-            
-            #data_testing, self.test_labels = data_training, self.train_labels
-            #print (colored ("[%s] skipping test files (splitting training set)" % settings.analyser, "red"))
-        
-            
+            data_testing = test_data
+            data_training = train_data
+            self.train_labels = train_labs
+            self.test_labels = test_labs
+            self.test_fs = test_fs
         else:
-            print (colored ("[%s] analysing testing files..." % settings.analyser, "red"))
-            self.total_sound_length, self.min_sound_length, self.max_sound_length = 0, np.inf, 0
-            data_testing, self.test_labels  = self.featxtr(self.test_soundfiles, self.test_labels)
-        self.results["min_sound_length_test"] = self.min_sound_length
-        self.results["max_sound_length_test"] = self.max_sound_length
-        self.results["avg_sound_length_test"] = self.total_sound_length / self.test_labels.shape[0]
+            raise ValueError("Cannot identify method %s for splitting training data" )
+
+        ### PRE-PROCESSING ####################################################
         
-        print (colored ("[%s] preprocessing..." % settings.analyser, "red"))
+        logger.info (colored ("[%s] preprocessing..." % settings.analyser, IMPORTANT))
         data_training, data_testing = self.preprocess(data_training, data_testing)
         
         self.data_training, self.data_testing = data_training, data_testing
@@ -501,10 +687,12 @@ class Classispecies(object):
         
         
         # CODE HAS CHANGED. EXPORT FOR AZURE NEEDS ADJUSTING AND TESTING  
-        #print (colored ("exporting data...", "red"))
+        #logger.info (colored ("exporting data...", "red"))
         #Y = self.export_for_azure(self.X, self.labels, len(self))
+
+        ### CLASSIFY ##########################################################
         
-        print (colored ("[%s] classifying..." % settings.classifier, "red"))
+        logger.info (colored ("[%s] classifying..." % settings.classifier, IMPORTANT))
         if settings.classifier == 'decisiontree' or settings.classifier == 'randomforest':
 #            settings.MULTILABEL = True
 #            labels_testing = label_binarize(self.train_labels, self.classes)

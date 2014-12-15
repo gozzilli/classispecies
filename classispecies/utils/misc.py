@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import os, socket
+from __future__ import print_function
+import os, socket, sys
 import pickle
 import shutil
-from classispecies import settings
+
+import logging.config
+import yaml
 
 from datetime import datetime
 from pprint import pformat
@@ -13,6 +16,8 @@ from types import ModuleType, FunctionType
 
 from matplotlib import pyplot as plt
 from IPython.display import FileLink, display
+
+from classispecies import settings
 
 
 def mybasename(path):
@@ -62,7 +67,6 @@ def dump_report(variables, modelname):
     
     variables["settings"] = result
     variables["modelname"] = modelname
-    print "modelname:", modelname
     
     now = datetime.now()
     filetimestamp = now.strftime("%Y_%m_%d__%H:%M:%S")
@@ -90,7 +94,7 @@ def dump_report(variables, modelname):
     with open(outfilename, 'wb') as f:
         f.write(template.render(variables))
         
-    print "dumping report to:" 
+    print ("dumping report to:")
     display(FileLink(outfilename.replace(" ", "\\ ")))
 
 
@@ -107,13 +111,34 @@ def plot_or_show(fig, filename=None, tight=True, **kwargs):
     if tight:
         fig.tight_layout()
     if settings.savefig:
-        print "saving", filename
+        print ("saving", filename)
         fig.savefig(filename or settings.filename, **kwargs)
     if settings.show:
-        print "showing"
+        print ("showing")
         fig.show()
     #fig.close()
     fig.clf()
     plt.close('all')
     
-    print "done"
+    print ("done")
+
+def config_logging(name):
+    with open( 'logging.yaml', 'r') as f:
+        logging.config.dictConfig(yaml.load(f))
+
+    if name in ['result_to_file', 'result_to_grid']:
+        logger = logging.getLogger(name)
+    else:
+        logger = logging.getLogger("classispecies")
+        logger.name = name
+        logger.setLevel(settings.logger_level)
+        # logger.debug("logger ready")
+    return logger
+
+def logger_shutdown():
+    logging.shutdown()
+
+
+def rprint(str_):
+    print ("\r%s\r" % str_, end="")
+    sys.stdout.flush()
