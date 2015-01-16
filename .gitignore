@@ -4,3 +4,4 @@ outputs
 *.pyc
 exec.log*
 grid.log
+*.log
