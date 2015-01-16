@@ -10,6 +10,13 @@ def stft(x, fs, framesz, hop):
                      for i in range(0, len(x)-framesamp, hopsamp)])
     return X
 
+
+def stft2(x, fs, framesamp, hopsamp):
+    w = scipy.hamming(framesamp)
+    X = scipy.array([scipy.fft(w*x[i:i+framesamp]) 
+                     for i in range(0, len(x)-framesamp, hopsamp)])
+    return X
+    
 # def stft(x, fs, framesz, hop):
 #     framesamp = len(x)
 #     hopsamp = int(hop*fs)

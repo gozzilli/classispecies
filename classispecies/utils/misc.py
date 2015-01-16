@@ -4,15 +4,17 @@ from __future__ import print_function
 import os, socket, sys
 import pickle
 import shutil
+from collections import OrderedDict
 
 import logging.config
 import yaml
+import numpy as np
 
 from datetime import datetime
 from pprint import pformat
 from jinja2.environment import Environment
 from jinja2.loaders import FileSystemLoader
-from types import ModuleType, FunctionType
+from types import ModuleType, FunctionType, BuiltinFunctionType, TypeType
 
 from matplotlib import pyplot as plt
 from IPython.display import FileLink, display
@@ -39,8 +41,9 @@ def gethostname():
     return socket.gethostname()
 
 def get_path(pathvar, set_):
-    
+
     hostpaths = pathvar.get(gethostname(), pathvar.get("default"))
+
     if isinstance(hostpaths, dict):
         return hostpaths[set_]
     else:
@@ -52,9 +55,13 @@ def get_soundpath(soundpaths=settings.SOUNDPATHS, set_="train"):
 def dump_report(variables, modelname):
     
     sett = ""
-    vars_ = vars(settings)
+    vars_ = OrderedDict(sorted(vars(settings).items()))
+
     for k,v in vars_.iteritems():
-        if not k.startswith("__") and not isinstance(v, ModuleType) and not isinstance(v, FunctionType):
+        if not k.startswith("__") and not isinstance(v, ModuleType) \
+                                  and not isinstance(v, FunctionType) \
+                                  and not isinstance(v, BuiltinFunctionType) \
+                                  and not isinstance(v, TypeType):
             sett += "%s = %s\n" % (k, pformat(v))
     
     from pygments import highlight
@@ -142,3 +149,13 @@ def logger_shutdown():
 def rprint(str_):
     print ("\r%s\r" % str_, end="")
     sys.stdout.flush()
+    
+
+def savedata_for_azure(filename, obj):
+    ''' export feature data to file so that they can be processed by Azure ML '''
+
+    np.savetxt(make_output_filename(filename, "", settings.modelname, "csv"), obj, delimiter=",",
+               fmt="%s", comments = '', header= ",".join(["label"] +
+                                #["mean%d" % x for x in range(settings.NMFCCS-1)] +
+                                #["std%d"  % x for x in range(settings.NMFCCS-1)] +
+                                ["max%d"  % x for x in range(settings.NMFCCS-1)] ))

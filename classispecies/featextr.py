@@ -10,6 +10,7 @@ from __future__ import print_function
 import sys, os
 import numpy as np
 
+import scipy
 import scipy.io.wavfile as wav
 
 from scipy.interpolate import interp1d
@@ -25,8 +26,31 @@ from multiprocessing import Pool, cpu_count
 import settings
 from utils import misc, signal as usignal
 from utils.misc import rprint
+from utils.plot import feature_plot
 
 logger = misc.config_logging("classispecies")
+
+def downscale_spectrum(feat, target):
+    ''' feat must be the right way up already (i.e. for fbank and the lot, transpose it first) '''
+    
+    feats = []
+        
+    no_y, no_x = feat.shape
+    x = range(no_x)
+    bin_counter = 0
+    
+    for bin_ in feat:
+    
+        f = interp1d(x, bin_)
+        xnew = np.arange(target)
+        fx = f(xnew)
+        feats.append(fx)
+        bin_counter += 1
+        
+    return np.array(feats)
+
+def half2Darray(arr):
+    return arr[:,:arr.shape[1]/2]
 
 
 class FeatureSet(object):
@@ -55,7 +79,7 @@ class FeatureSet(object):
             X (2d-array):           extracted features
         
         '''
-
+        
         if labels == None:
             labels = np.empty( (len(soundfiles), 1) )
             
@@ -77,13 +101,17 @@ class FeatureSet(object):
 #            logger.info( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
 #            sys.stdout.flush()
             
-            (rate,signal_all) = wav.read(soundfile)
+            try:
+                (rate,signal_all) = wav.read(soundfile)
+            except:
+                print ("\n", soundfile, "\n")
+                raise
             
             ''' take one channel only, if more than one present '''
             if len(signal_all.shape) > 1:    
                 signal_all = signal_all[:,0]
                 
-            secs = float(len(signal_all))/rate
+            #secs = float(len(signal_all))/rate
     
             if n_segments:
                 signals = np.array_split(signal_all, n_segments)
@@ -133,6 +161,8 @@ class FeatureSet(object):
                     rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
                     is_analysing = False
                     res.append(misc.load_from_pickle(picklename))
+                    
+                print ("\n{:,}\n".format(sys.getsizeof(res)/1000))
              
                 chunk_counter += 1
                 total_counter += 1
@@ -166,14 +196,16 @@ class FeatureSet(object):
         X = np.vstack(X)
         new_labels = np.vstack(new_labels)
 
+        print(X.shape[0], new_labels.shape[0])
+        print()
+        print()
         assert X.shape[0] == new_labels.shape[0]
         logger.info("")
         
-        global db
         db = np.array(db, dtype=[("soundfile"        , 'S200'), 
                                  ("chunk_counter"    , int),
                                  ("length"           , int),
-                                 ("truth"            , str(labels.shape[1])+"int16")]).view(np.recarray)
+                                 ("truth"            , str(labels.shape[-1])+"S")]).view(np.recarray)
 
         
         self.data = X
@@ -193,12 +225,15 @@ class FeatureSet(object):
     def split(self, soundfiles, cut=0.5):
         
         assert cut*len(self) # must not be 0 or None
-        
+        print (self.labels)
         indices = np.random.permutation(len(self))
         idx1, idx2 = indices[:cut*len(self)], indices[cut*len(self):]
         
         data1, data2 = self.data  [idx1,:], self.data  [idx2,:]
-        lab1,  lab2  = self.labels[idx1,:], self.labels[idx2,:]    
+        if settings.MULTILABEL:
+            lab1,  lab2  = self.labels[idx1,:], self.labels[idx2,:]    
+        else:
+            lab1, lab2 = self.labels[idx1], self.labels[idx2]
 
         print ("INDICES", len(idx1), len(idx2), idx1, idx2)
         
@@ -231,6 +266,11 @@ class FeatureSet(object):
         fs2.set_stats()
         
         return fs1, fs2, [],[]#train_soundfiles, test_soundfiles
+        
+    def preprocess(self):
+        
+        if settings.whiten_feature_matrix:
+            self.data = whiten(self.data)
         
     
     def __len__(self):
@@ -328,31 +368,60 @@ def extract_mel(signal, rate, normalise):
     
 def extract_melfft(signal, rate, normalise):    
     
-    global mel_feat
+    NFFT = 2**14
+    NFILT = 40
     
-    mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, 
-                                              winlen=0.0232, winstep=0.0232,
-                                           nfilt=settings.N_MEL_FILTERS)), 
-                       a_min=-100, a_max=100)
+#    mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, lowfreq=500, 
+#                                              #winlen=0.0232, winstep=0.0232,
+#                                              #nfilt=settings.N_MEL_FILTERS)), 
+#                                             nfilt=26)),
+#                       a_min=-100, a_max=100)
+    
+    mel_feat = fbank(signal, nfilt=NFILT, winstep=0.0232, winlen=0.0232)[0]
+    melfft = np.abs(scipy.fft(mel_feat.T, n=NFFT))[:,0:NFFT/2]
+    
+    try:
+        assert melfft.shape == (NFILT, NFFT/2)
+    except AssertionError:
+        print ("MELFFT SHAPE:", melfft.shape)
+        raise
+        
+    return np.hstack(10*np.log10(downscale_spectrum(melfft, 10)))
+    
     
     d, M = mel_feat.shape
     x = np.arange(d)
 
+#    feats = []
+#    bin_counter = 0
+#    for bin_ in mel_feat.T:
+#        fft_ = np.fft.fft(bin_)            
+#        f = interp1d(x, fft_)
+#        xnew = np.arange(10)
+#        fx = f(xnew)
+#        feats.append(fx)
+#        bin_counter += 1
+
     feats = []
-    bin_counter = 0
     for bin_ in mel_feat.T:
-        fft_ = np.fft.fft(bin_)            
-        f = interp1d(x, fft_)
-        xnew = np.arange(10)
-        fx = f(xnew)
-        feats.append(fx)
-        bin_counter += 1
+        fft_ = np.fft.fft(bin_, n=20)
+        feats.append(fft_[0:10])
     
-    return np.hstack( feats )        
+    return np.hstack( feats )  
+
+def extract_hertzfft(signal, rate, normalise):
+    
+    NFFT = 2**14
+    
+    frame_size = 256
+    hop        = 128
+
+    hertz_feat = half2Darray(np.abs(usignal.stft2(signal, rate, frame_size, hop))).T
+    hertz_fft  = half2Darray(np.abs(scipy.fft(hertz_feat, n=NFFT)))
+    
+    return np.hstack(10*np.log10(downscale_spectrum(hertz_fft, 10)))
     
 def extract_hertz(signal, rate, normalise):
-    
-    global hertz_feat, signal__
     
     signal__ = signal
 #        hertz_feat = usignal.stft(signal, rate, 0.1, 0.01)        
@@ -373,7 +442,6 @@ def extract_hertz(signal, rate, normalise):
 
 def extract_oskmeans(signal, rate, normalise):
         
-    global mel_feat, new_mel_feat
     mel_feat = np.clip(np.nan_to_num(logfbank(signal, rate, 
                                               lowfreq=500, 
                                               nfilt=settings.N_MEL_FILTERS)), 
@@ -401,7 +469,7 @@ def extract_oskmeans(signal, rate, normalise):
 def exec_featextr(soundfile, signal, rate, analyser, picklename,
                   soundfile_counter, chunk_counter, n_soundfiles, 
                   highpass_cutoff, normalise):
-    rprint("AA[%d.%02d/%d] [pid:%d] analysing %s" % (soundfile_counter+1, chunk_counter, 
+    rprint("[%d.%02d/%d] [pid:%d] analysing %s" % (soundfile_counter+1, chunk_counter, 
                               n_soundfiles, os.getpid(), os.path.basename(soundfile)) )
     
 #    if highpass_cutoff > 0:
@@ -412,6 +480,7 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
     elif analyser == "mel-filterbank" : feat = extract_mel(signal, rate, normalise)
     elif analyser == "melfft"         : feat = extract_melfft(signal, rate, normalise)
     elif analyser == "hertz-spectrum" : feat = extract_hertz(signal, rate, normalise)
+    elif analyser == "hertzfft"       : feat = extract_hertzfft(signal, rate, normalise)
     elif analyser == "oskmeans"       : feat = extract_oskmeans(signal, rate, normalise)
     else:
         raise ValueError("Feature extraction method '%s' not known." % analyser)
