@@ -2,3 +2,5 @@ old
 features
 outputs
 *.pyc
+exec.log*
+grid.log
