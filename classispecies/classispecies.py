@@ -405,7 +405,7 @@ class Classispecies(object):
         train_fs.preprocess()
         test_fs.preprocess()
         
-            
+        print ("trying to plot a %dx%d matrix" % (train_fs.data.shape[0],train_fs.data.shape[1]))
         if settings.FEATURES_PLOT:
             feature_plot(train_fs.data, settings.modelname, settings.MPL_FORMAT)
 

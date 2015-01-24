@@ -7,7 +7,7 @@ analyser   = "mfcc"
 ## settings
 SPECTR_PLOT     = False
 CONFUSION_PLOT  = True
-FEATURES_PLOT   = True
+FEATURES_PLOT   = False
 IMPORTANCE_PLOT = True # most important features according to classifier
 TREE_PLOT       = False
 CLASSIF_PLOT    = True
@@ -36,6 +36,7 @@ logger_level   = "INFO"
 SPLIT_TRAINING_SET  = False
 SPLIT_METHOD        = "split-after"
 FORCE_FEATXTR       = False
+FORCE_FEATXTRALL    = False
 MULTILABEL          = True
 MULTICORE           = False
 

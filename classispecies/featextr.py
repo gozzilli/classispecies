@@ -8,12 +8,12 @@ Created on Fri Nov 21 11:44:16 2014
 from __future__ import print_function
 
 import sys, os
-import numpy as np
+import traceback
 
+import numpy as np
 import scipy
 import scipy.io.wavfile as wav
 
-from scipy.interpolate import interp1d
 from scipy.cluster.vq import  whiten
 
 from features import mfcc, logfbank, fbank
@@ -32,6 +32,24 @@ logger = misc.config_logging("classispecies")
 
 def downscale_spectrum(feat, target):
     ''' feat must be the right way up already (i.e. for fbank and the lot, transpose it first) '''
+
+    out = []
+    no_y, no_x = feat.shape
+    
+    incr = no_x/float(target)
+    
+    for i in range(target):
+        #print "A", feat[:,incr*i:incr*(i+1)]
+        #print "B", mean(feat[:,incr*i:incr*(i+1)], axis=1)[np.newaxis]
+        out.append( np.mean(feat[:,incr*i:incr*(i+1)], axis=1)[np.newaxis].T )
+
+    return np.array(np.hstack(out))
+        
+    
+    
+""" OLD DOWNSCALE SPECTRUM  
+def downscale_spectrum(feat, target):
+    ''' feat must be the right way up already (i.e. for fbank and the lot, transpose it first) '''
     
     feats = []
         
@@ -48,6 +66,7 @@ def downscale_spectrum(feat, target):
         bin_counter += 1
         
     return np.array(feats)
+"""
 
 def half2Darray(arr):
     return arr[:,:arr.shape[1]/2]
@@ -91,113 +110,163 @@ class FeatureSet(object):
         chunk2soundfile   = []
         db = []
         
-        
-        if settings.MULTICORE:
-            logger.info ("Starting pool of %d processes" % (cpu_count()))
-            pool = Pool(processes=cpu_count())
-
-        for soundfile, lab in zip(soundfiles, labels):
-        
-#            logger.info( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
-#            sys.stdout.flush()
-            
-            try:
-                (rate,signal_all) = wav.read(soundfile)
-            except:
-                print ("\n", soundfile, "\n")
-                raise
-            
-            ''' take one channel only, if more than one present '''
-            if len(signal_all.shape) > 1:    
-                signal_all = signal_all[:,0]
-                
-            #secs = float(len(signal_all))/rate
-    
-            if n_segments:
-                signals = np.array_split(signal_all, n_segments)
-                
-            elif sec_segments:
-                signals = [signal_all[x:x+rate*sec_segments] for x in np.arange(0, len(signal_all), rate*sec_segments)]
-                #signals = np.array_split(signal_all, np.arange(0, len(signal_all), rate*self.sec_segments))
-             
-                
-            else:
-                signals = np.array([signal_all])
-                
-            # logger.info ("signals:", signals)
-            # logger.info ("secs:", secs)
-            # logger.info ("sec per signal:", ", ".join(map(str, [len(x) for x in signals])))
-            
-            chunk_counter = 0
-            for signal in signals:
-            
-                if sec_segments and len(signal) < sec_segments * rate: 
-                    continue
-            
-                chunk2soundfile.append(soundfile_counter)
-                db.append( (soundfile, chunk_counter, len(signal)/float(rate), lab) )
-                
-                chunk_name = "%s%s" % (misc.mybasename(soundfile), ("_c%03d" % chunk_counter if n_segments or sec_segments else ""))
-                
-                    
-                picklename = misc.make_output_filename(chunk_name, settings.analyser,
+        allpicklename = misc.make_output_filename("all", settings.analyser+str(settings.sec_segments or ""),
                                                        settings.modelname, "pickle", removeext=False)
+                                                       
+        if not os.path.exists(allpicklename) or settings.FORCE_FEATXTRALL:
+            
+            if settings.MULTICORE:
+                logger.info ("Starting pool of %d processes" % (cpu_count()))
+                pool = Pool(processes=cpu_count())
                 
-                if not os.path.exists(picklename) or settings.FORCE_FEATXTR:
+            picklenames = []
+    
+            for soundfile, lab in zip(soundfiles, labels):
+            
+    #            logger.info( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
+    #            sys.stdout.flush()
+                
+                try:
+                    (rate,signal_all) = wav.read(soundfile)
+                except:
+                    print ("\n", soundfile, "\n")
+                    raise
+                
+                ''' take one channel only, if more than one present '''
+                if len(signal_all.shape) > 1:    
+                    signal_all = signal_all[:,0]
                     
-                    is_analysing = True
+                #secs = float(len(signal_all))/rate
+        
+                if n_segments:
+                    signals = np.array_split(signal_all, n_segments)
                     
-                    if settings.MULTICORE:
-                        res.append( pool.apply_async(exec_featextr, 
-                                        [soundfile, signal, rate, analyser, picklename,
-                                         soundfile_counter, chunk_counter, len(soundfiles), 
-                                         highpass_cutoff, normalise]) )
-                    else:
-                        res.append( exec_featextr(soundfile, signal, rate, analyser, picklename,
-                                         soundfile_counter, chunk_counter, len(soundfiles), 
-                                         highpass_cutoff, normalise) )
-                      
+                elif sec_segments:
+                    signals = [signal_all[x:x+rate*sec_segments] for x in np.arange(0, len(signal_all), rate*sec_segments)]
+                    #signals = np.array_split(signal_all, np.arange(0, len(signal_all), rate*self.sec_segments))
+                 
+                    
                 else:
-                    rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
-                    is_analysing = False
-                    res.append(misc.load_from_pickle(picklename))
+                    signals = np.array([signal_all])
                     
-                print ("\n{:,}\n".format(sys.getsizeof(res)/1000))
-             
-                chunk_counter += 1
-                total_counter += 1
+                # logger.info ("signals:", signals)
+                # logger.info ("secs:", secs)
+                # logger.info ("sec per signal:", ", ".join(map(str, [len(x) for x in signals])))
                 
-                new_labels.append(lab)
-                ### end signals loop
                 
-            rprint( "[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename) ) )
-            sys.stdout.flush()
-            
-            soundfile_counter += 1
-            ### end soundfiles loop
-            
-            
-        if settings.MULTICORE:
-            pool.close()
-            pool.join()
+                chunk_counter = 0
+                for signal in signals:
+                
+                    if sec_segments and len(signal) < sec_segments * rate: 
+                        continue
+                
+                    chunk2soundfile.append(soundfile_counter)
+                    db.append( (soundfile, chunk_counter, len(signal)/float(rate), lab) )
+    #                if total_counter % 10000 == 0:
+    #                    print ("\n{:,} kB\n".format(sum([sys.getsizeof(x) for x in [
+    #                        self.db, db, self.data, labels, self.max_length, self.min_length,
+    #                        self.avg_length, self.tot_length, picklenames, total_counter, 
+    #                        signals, new_labels]])/1000.))
+    #                    print ("1  {:,}".format(sys.getsizeof(db)/1000))
+    #                    print ("2  {:,}".format(sys.getsizeof(self.db)/1000))
+    #                    print ("3  {:,}".format(sys.getsizeof(self.data)/1000))
+    #                    print ("4  {:,}".format(sys.getsizeof(labels)/1000))
+    #                    print ("5  {:,}".format(sys.getsizeof(self.max_length)/1000))
+    #                    print ("6  {:,}".format(sys.getsizeof(self.min_length)/1000))
+    #                    print ("7  {:,}".format(sys.getsizeof(self.avg_length)/1000))
+    #                    print ("8  {:,}".format(sys.getsizeof(self.tot_length)/1000))
+    #                    print ("9  {:,}".format(sys.getsizeof(res)/1000))
+    #                    print ("10 {:,}".format(sys.getsizeof(picklenames)/1000))
+    #                    print ("11 {:,}".format(sys.getsizeof(new_labels)/1000))
+    #                    print ("12 {:,}".format(sys.getsizeof(total_counter)/1000))
+    #                    print ("13 {:,}".format(sys.getsizeof(signals)/1000))
+    #                    print ()
+                            
+                    
+                    chunk_name = "%s%s" % (misc.mybasename(soundfile), ("_c%03d" % chunk_counter if n_segments or sec_segments else ""))
+                    
+                        
+                    picklename = misc.make_output_filename(chunk_name, settings.analyser+str(settings.sec_segments or ""),
+                                                           settings.modelname, "pickle", removeext=False)
+                    picklenames.append(picklename)
+                    
+                    if not os.path.exists(picklename) or settings.FORCE_FEATXTR:
+                        
+                        is_analysing = True
+                        
+                        if settings.MULTICORE:
+                            #res.append( pool.apply_async(exec_featextr, 
+                            pool.apply_async(exec_featextr,
+                                            [soundfile, signal, rate, analyser, picklename,
+                                             soundfile_counter, chunk_counter, len(soundfiles), 
+                                             highpass_cutoff, normalise]) 
+                            #)
+                        else:
+                            #res.append( exec_featextr(soundfile, signal, rate, analyser, picklename,
+                            exec_featextr(soundfile, signal, rate, analyser, picklename,
+                                             soundfile_counter, chunk_counter, len(soundfiles), 
+                                             highpass_cutoff, normalise) 
+                            #)
+                          
+                    else:
+                        if soundfile_counter % 30 == 0:
+                            rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
+                        is_analysing = False
+                        #res.append(misc.load_from_pickle(picklename))
+                        
+                    #print ("{:,}".format(sys.getsizeof(res)/1000))
+                 
+                    chunk_counter += 1
+                    total_counter += 1
+                    
+                    new_labels.append(lab)
+                    ### end signals loop
+                    
+                #rprint( "[%d.%02d/%d] %s %s         " % (soundfile_counter+1, chunk_counter, len(soundfiles), "analysed" if is_analysing else "unpickled", os.path.basename(soundfile if is_analysing else picklename) ) )
+                #sys.stdout.flush()
+                
+                # gc.collect()
+                
+                soundfile_counter += 1
+                ### end soundfiles loop
+                
+            print() 
         
-            
-        X = [] ## (n_samples x n_features)
-        for x in res:
-            
-            if isinstance(x, ApplyResult):
-                x = x.get()
-
-            if x == None: continue
-            
-            X.append(x)
-
         
-        X = np.vstack(X)
-        new_labels = np.vstack(new_labels)
+            if settings.MULTICORE:
+                pool.close()
+                pool.join()
+                
+            print ("unpickling %d files" % len(picklenames))
+            for picklename in picklenames:
+                res.append(misc.load_from_pickle(picklename))
+            
+                
+            X = [] ## (n_samples x n_features)
+            res_counter = 0
+            for x in res:
+                
+                res_counter += 1
+                if isinstance(x, ApplyResult):
+                    print ("%d ApplyResult" % res_counter)
+                    x = x.get()
+    
+                if x == None: 
+                    print ("%d continuing..." % res_counter)
+                    continue
+                
+                X.append(x)
+    
+            
+            X = np.vstack(X)
+            new_labels = np.vstack(new_labels)
+            
+            misc.dump_to_pickle( (X, new_labels, db), allpicklename)
+        
+        else:
+            X, new_labels, db = misc.load_from_pickle(allpicklename)
 
-        print(X.shape[0], new_labels.shape[0])
-        print()
+        print("\nX.shape[0]: %d, new_labels.shape[0]: %d" % (X.shape[0], new_labels.shape[0]))
         print()
         assert X.shape[0] == new_labels.shape[0]
         logger.info("")
@@ -235,12 +304,14 @@ class FeatureSet(object):
         else:
             lab1, lab2 = self.labels[idx1], self.labels[idx2]
 
-        print ("INDICES", len(idx1), len(idx2), idx1, idx2)
-        
         db1, db2 = self.db[idx1], self.db[idx2]
         
         train_soundfiles = []
         test_soundfiles  = []
+        
+        print ("DBs", len(db1.soundfile), len(db2.soundfile))
+        
+        missing = []
         
         for f in soundfiles:
             if f in db1.soundfile:
@@ -248,7 +319,11 @@ class FeatureSet(object):
             if f in db2.soundfile:
                 test_soundfiles.append(f)
             if f not in db1.soundfile and f not in db2.soundfile:
-                raise Exception("Soundfile doesn't seem to belong to neither train nor test set")
+                print (f, "missing")
+                missing.append(f)
+                #raise Exception("Soundfile %s doesn't seem to belong to neither train nor test set" % f)
+        
+        print ("missing (%d) %s" % (len(missing), missing))
         
         print ("train soundfiles length:", len(train_soundfiles))
         print ("test  soundfiles length:", len(test_soundfiles))
@@ -414,7 +489,7 @@ def extract_hertzfft(signal, rate, normalise):
     NFFT = 2**14
     
     frame_size = 256
-    hop        = 128
+    hop        = 256
 
     hertz_feat = half2Darray(np.abs(usignal.stft2(signal, rate, frame_size, hop))).T
     hertz_fft  = half2Darray(np.abs(scipy.fft(hertz_feat, n=NFFT)))
@@ -469,22 +544,25 @@ def extract_oskmeans(signal, rate, normalise):
 def exec_featextr(soundfile, signal, rate, analyser, picklename,
                   soundfile_counter, chunk_counter, n_soundfiles, 
                   highpass_cutoff, normalise):
-    rprint("[%d.%02d/%d] [pid:%d] analysing %s" % (soundfile_counter+1, chunk_counter, 
-                              n_soundfiles, os.getpid(), os.path.basename(soundfile)) )
-    
-#    if highpass_cutoff > 0:
-#        signal = usignal.highpass_filter(signal[:], cutoff=highpass_cutoff)
-            
-    
-    if   analyser == "mfcc"           : feat = extract_mfcc(signal, rate, normalise)
-    elif analyser == "mel-filterbank" : feat = extract_mel(signal, rate, normalise)
-    elif analyser == "melfft"         : feat = extract_melfft(signal, rate, normalise)
-    elif analyser == "hertz-spectrum" : feat = extract_hertz(signal, rate, normalise)
-    elif analyser == "hertzfft"       : feat = extract_hertzfft(signal, rate, normalise)
-    elif analyser == "oskmeans"       : feat = extract_oskmeans(signal, rate, normalise)
-    else:
-        raise ValueError("Feature extraction method '%s' not known." % analyser)
-    
-    misc.dump_to_pickle(feat, picklename)
-    
-    return feat
+    try:
+        rprint("[%d.%02d/%d] [pid:%d] analysing %s" % (soundfile_counter+1, chunk_counter, 
+                                  n_soundfiles, os.getpid(), os.path.basename(soundfile)) )
+        
+    #    if highpass_cutoff > 0:
+    #        signal = usignal.highpass_filter(signal[:], cutoff=highpass_cutoff)
+                
+        if   analyser == "mfcc"           : feat = extract_mfcc(signal, rate, normalise)
+        elif analyser == "mel-filterbank" : feat = extract_mel(signal, rate, normalise)
+        elif analyser == "melfft"         : feat = extract_melfft(signal, rate, normalise)
+        elif analyser == "hertz-spectrum" : feat = extract_hertz(signal, rate, normalise)
+        elif analyser == "hertzfft"       : feat = extract_hertzfft(signal, rate, normalise)
+        elif analyser == "oskmeans"       : feat = extract_oskmeans(signal, rate, normalise)
+        else:
+            raise ValueError("Feature extraction method '%s' not known." % analyser)
+        
+        misc.dump_to_pickle(feat, picklename)
+        
+        return feat
+    except:
+        
+        traceback.print_exc()

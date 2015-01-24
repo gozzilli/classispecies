@@ -16,6 +16,7 @@ settings.MULTILABEL = False
 settings.SPLIT_TRAINING_SET = True
 settings.FORCE_FEATXTR = False
 settings.MULTICORE = True
+settings.FORCE_FEATXTRALL = False
 
 settings.SOUNDPATHS['default'] = {
    'train' : home('~/cicada-largefiles/bl-files/all-16bit'),
@@ -40,6 +41,12 @@ df = df[df.sound.str.lower().isin([x[0:-4] for x in available_files])]
 df['species_latin'] = [re.sub("[\. ]", "", x.lower()) for x in df['species_latin']]
 df['sound'] = [os.path.join(dir_, x.lower() + ".wav") for x in df['sound']]
 
+### if you want a list of species
+#df.groupby(['species_latin']).agg(len).sort('sound', ascending=False).to_html('/tmp/species.html')
+
+### if you remove parse_cols from read_excel, you can find families as well
+#df.groupby(['family_latin']).agg({'id' : len}).sort('id', ascending=False).to_html('/tmp/families.html')
+
 
 
 print df.describe()
@@ -54,9 +61,13 @@ settings.LABELS = {'default' : {
 }}
 
 
-for analyser in ["hertzfft"]: # "mel-filterbank", "mfcc",
-    for classifier in ["decisiontree"]:
-        for sec_segments in [1.0]:
+from classispecies.classispecies import Classispecies
+class BlOrthopteraModel(Classispecies):
+    pass
+
+for analyser in ["hertzfft"]: #, "mel-filterbank", "mel-fft", "mfcc"]: # "mel-filterbank", "mfcc",
+    for classifier in ["decisiontree", "randomforest"]:
+        for sec_segments in [5.0]:
             
             print "=" * 80
             print "ANALYSER:   %s" % analyser
@@ -66,13 +77,10 @@ for analyser in ["hertzfft"]: # "mel-filterbank", "mfcc",
             settings.classifier = classifier
             settings.analyser   = analyser
             #settings.n_segments = 5
+            #settings.sec_segments = sec_segments
             settings.sec_segments = sec_segments
             settings.NMFCCS = 13
             
             
-            from classispecies.classispecies import Classispecies
-            class UkOrthopteraModel(Classispecies):
-                pass
-            
-            model = UkOrthopteraModel()
+            model = BlOrthopteraModel()
             model.run()
