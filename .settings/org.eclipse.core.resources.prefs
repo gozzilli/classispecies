@@ -1,5 +1,17 @@
 eclipse.preferences.version=1
 encoding//classispecies/classispecies.py=utf-8
 encoding//classispecies/featextr.py=utf-8
+encoding//classispecies/utils/makelabels.py=utf-8
 encoding//classispecies/utils/misc.py=utf-8
+encoding//classispecies/utils/plot.py=utf-8
+encoding//serve/serve.py=utf-8
+encoding//tests/convert2weka.py=utf-8
+encoding//tests/cs/plot.py=utf-8
+encoding//tests/features_compact.py=utf-8
 encoding/blorthoptera.py=utf-8
+encoding/blorthoptera_dataset.py=utf-8
+encoding/cicada_dataset.py=utf-8
+encoding/nfc3species.py=utf-8
+encoding/nfc_vs_rbc.py=utf-8
+encoding/plotall.py=utf-8
+encoding/ukorthoptera.py=utf-8

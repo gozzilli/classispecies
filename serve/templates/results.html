@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block head_title %}Model results{% endblock %}
+
+{% block body %}
+<div id="container">
+  <input class="search" placeholder="Search" />
+
+	<table class="results" id="results">
+	    <thead>
+	    	<tr> 
+	<!--     		<th>Data set</th> -->
+	    		<th>Classifier</th>
+	    		<th>Chunks</th>
+	    		<th>NFFT1</th>
+<!-- 	    		<th>NFFT2</th> -->
+	    		<th>DS Fact</th>
+	    		<th>Mel</th>
+	    		<th>Log</th>
+	    		<th>DCT</th>
+	    		<th>MOD</th>
+	    		<th>&mu;</th>
+	    		<th>&sigma;</th>
+	    		<th>Max</th>
+	    		<th>Features</th>
+	    		<th>Samples</th>
+	    		<th id="f1">f1 score <span onclick="sortTable(14)">&#9660;</span></th>
+				<!-- <th>&sigma;(f1)</th> -->
+				<th>f1 merged</th>
+	    		<th>ROC AUC <span onclick="sortTable(16)">&#9660;</span></th>
+	    		<th>ROC merged</th>
+	    		<th>% correct</th>
+	    		<th>run</th>
+	    	</tr>
+	    	
+	   	</thead>
+	    <tbody class="list">
+	    {% for row in rows %}
+	    <tr>
+	<!-- 		<th>{{row.modelname}}</th> -->
+			<td class="classifier">{{row.classifier}}</td>
+			<td class="chunks">{{row.n_chunks}}</td>		
+			<td>{{row.NFFT1}}</td>
+<!-- 			<td>{{row.NFFT2}}</td> -->
+			<td>{% if row.downscale_factor %}{{row.downscale_factor}}{% endif %}</td>
+			<td>{% if row.extract_mel %}&bull;{% endif %}</td>
+			<td>{% if row.extract_dolog %}&bull;{% endif %}</td>
+			<td>{% if row.extract_dct %}&bull;{% endif %}</td>
+			<td>{% if row.extract_fft2 %}&bull;{% endif %}</td>
+			<td>{% if row.extract_mean %}&bull;{% endif %}</td>
+			<td>{% if row.extract_std %}&bull;{% endif %}</td>
+			<td>{% if row.extract_max %}&bull;{% endif %}</td>
+			<td>{{ row.nfeatures }}</td>
+			<td>{{ row.nsamples }}</td>
+			<td id="f1">{% if row.f1 %}{{ "%.3f" % row.f1 }}{% endif %}</td>
+			<td>{% if row.f1_merged %}{{ "%.3f" % row.f1_merged }}{% endif %}</td>
+	<!-- 		<td>{% if row.f1std %}{{ "%.3f" % row.f1std }}{% endif %}</td> -->
+			<td>{% if row.auc %}{{ "%.3f" % row.auc }}{% endif %}</td>
+			<td>{% if row.roc_merged %}{{ "%.3f" % row.roc_merged }}{% endif %}</td>
+			<td>{% if row.correct_percent %}{{ "%d" % row.correct_percent }}%{% endif %}</td>
+			<!--<td>{{ row._id }}</td> -->
+			<td title="{{ row.run_key }}"><a href="{{ url_for ('cs.serve_byid', model=row.modelname, guid=row.run_key) }}">{{ row.run_key }}</a></td>
+	    </tr>
+	    {% endfor %}
+	    </tbody>
+	</table>
+</div>
+<p>{{ rows.count() }} entries</p>
+
+<script type="text/javascript">
+function sortTable(col){
+    var tbl = document.getElementById("results").tBodies[0];
+    var store = [];
+    for(var i=0, len=tbl.rows.length; i<len; i++){
+        var row = tbl.rows[i];
+        var sortnr = parseFloat(row.cells[col].textContent || row.cells[col].innerText);
+        if(!isNaN(sortnr)) store.push([sortnr, row]);
+    }
+    store.sort(function(x,y){
+        return y[0] - x[0];
+    });
+    for(var i=0, len=store.length; i<len; i++){
+        tbl.appendChild(store[i][1]);
+    }
+    store = null;
+}
+</script>
+<script src="http://listjs.com/no-cdn/list.js"></script>
+
+<script type="text/javascript">
+	var options = {
+	  valueNames: [ 'classifier', "chunks" ]
+	};
+
+	var fieldList = new List('container', options);
+</script>
+ 
+{% endblock %}

@@ -1,0 +1,41 @@
+
+
+/* ==========================================================================
+   Author's custom styles
+   ========================================================================== */
+
+
+.hidden {
+    display: None
+}
+
+div.dir:hover, p.rec:hover {
+    cursor: pointer
+}
+
+table.results th,
+table.results td {
+	border: 0px;
+	padding: 1ex;
+	text-align: center;
+	
+}
+
+table.confusion td,
+table.confusion th, 
+table.insect-stats td,
+table.insect-stats th 
+{
+	padding: 1ex;
+	text-align: center;
+	border: black 1px solid;
+}
+
+table.confusion td {
+	background-color: black;
+}
+
+
+h3 {
+    color: #428bca;
+}

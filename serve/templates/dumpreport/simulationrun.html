@@ -1,0 +1,102 @@
+{% extends "layout.html" %}
+
+{% block title %}Classispecies {{modelname}}{% endblock %}
+
+{% block h1 %}
+<h2>SoundTrap Classispecies - {{modelname}}</h2>
+<p>{{ now }}</p>
+{% endblock %}
+
+{% block body %}
+	
+	<a href="#dataset">Dataset</a> |
+	<a href="#features">Features</a> |
+	<a href="#results">Results</a> |
+	<a href="#settings">Settings</a> 
+	
+	
+	<h3 id="dataset">Dataset</h3>
+	
+	    <h4>Training</h4>
+	    Soundfiles: <b>{{ n_train_files }}</b><br>
+	    Chunks: <b>{{ n_chunks }}</b><br>
+	    Length: <b>{{ "%.2f" % min_sound_length_train }}</b> sec to <b>{{ "%.2f" % max_sound_length_train }}</b> sec
+		    (mean: <b>{{ "%.2f" % avg_sound_length_train }}</b> sec)<br>
+	    
+	    <h4>Testing</h4>
+	    Soundfiles: <b>{{ n_test_files }}</b><br>
+	    Chunks: <b>{{ n_chunks }}</b><br>
+	    Length: <b>{{ "%.2f" % min_sound_length_test }}</b> sec to <b>{{ "%.2f" % max_sound_length_test }}</b> sec
+		    (mean: <b>{{ "%.2f" % avg_sound_length_test }}</b> sec)<br>
+	
+	<hr>
+	<h3 id="features">Features</h3>
+	    
+	    <p>
+		    Feature extraction: <b>{{ analyser }}</b><br/>
+		    <b>{{ nfeatures }}</b> features over <b>{{ nsamples }}</b> samples.
+	    </p>
+	    
+	    {% if features_plot %}
+		    <img src="{{ features_plot }}" />
+	    {% endif %}
+	
+	<hr>
+	<h3 id="results">Results</h3>
+	
+		<p>Classifier: <b>{{ classifier }}</b></p>
+		
+		<p>
+                    {% if correct is defined and total is defined and correct_percent is defined %}
+			Correct <b>{{correct}}</b> out of <b>{{ "%d" % total }} ({{"%.3f" % correct_percent}}%)</b>.<br>
+                    {% endif %}
+			{% if tps is defined %}
+				TP: {{ tps }}<br>
+			{% endif %}
+			{% if fps is defined %}
+				FP: {{ fps }}<br>
+			{% endif %}
+			{% if fns is defined %}
+				FN: {{ fns }}<br>
+			{% endif %}
+			{% if f1 is defined %}
+				F1 score: <b>{{ "%.3f" % f1 }}</b><br>
+			{% endif %}
+			
+		
+		</p>
+		
+		{% if auc is defined %}
+		<p>ROC AUC: <b>{{"%.3f" % auc}}</b></p>
+		{% endif %}
+		
+		{% if confusion_matrix or stats %}
+		<table class="results">
+			<tr>
+				<th>Confusion matrix</th>
+				<th>F Scoring</th>
+			</tr>
+			<tr>
+				<td>{{ confusion_matrix }}</td>
+				<td>{{ stats }}           </td>
+			</tr>
+		</table>
+		{% endif %}
+		
+		{% if output_plot %}
+			<img src="{{output_plot}}" style="max-width: 100%"/>
+		{% endif %}
+
+             {% if colored_res %}
+                <div>{{colored_res}}</div>
+             {% endif %}
+			
+			
+		
+
+	<hr>
+	<h3 id="settings">Settings</h3>
+	
+		{{settings}}
+	
+{% endblock %}

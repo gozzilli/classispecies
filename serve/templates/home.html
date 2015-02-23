@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block head_title %}Choose the dataset{% endblock %}
+{% block extra_head %}
+<style>
+	.centered {
+		text-align: center;
+	}
+</style>
+{% endblock %}
+	 
+{% block body %}
+
+<div class="centered">
+	<h2>Classispecies</h2>
+	<h3>Select the dataset<br/>
+	And get the latest results
+	</h3>
+</div>
+
+<div style="width: 30ex; margin: 0 auto;">
+	<h4 class="centered">~~~<br>Models</h4>
+	<ul>
+	{% for model in models %}
+	<li><a href="{{ url_for ('cs.serve_results', model=model) }}">{{ model }}</a></li>
+	{% endfor %}
+	</ul>
+	
+	<h4 class="centered">All settings</h4>
+	<ul>
+	{% for model in models %}
+	<li><a href="{{ url_for ('cs.serve_all', model=model) }}">{{ model }}</a></li>
+	{% endfor %}
+	</ul>
+</div>
+{% endblock %}

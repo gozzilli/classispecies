@@ -17,17 +17,30 @@ handlers:
     class : logging.handlers.RotatingFileHandler
     formatter: plain
     level: DEBUG
-    filename: exec.log
+    filename: outputs/logs/exec.log
     backupCount: 5
     maxBytes: 15000
   grid:
     class : logging.handlers.RotatingFileHandler
     formatter: plain
     level: DEBUG
-    filename: grid.log
+    filename: outputs/logs/grid.log
     backupCount: 5
     maxBytes: 15000
-
+  f1:
+    class: logging.handlers.RotatingFileHandler
+    formatter: plain
+    level: DEBUG
+    filename: outputs/logs/f1.log
+    backupCount: 5
+    maxBytes: 15000
+  confusion:
+    class: logging.handlers.RotatingFileHandler
+    formatter: plain
+    level: DEBUG
+    filename: outputs/logs/confusion.log
+    backupCount: 5
+    maxBytes: 1000000
 loggers:
   classispecies:
     level: DEBUG
@@ -39,3 +52,11 @@ loggers:
   result_to_grid:
     level: DEBUG
     handlers: [grid]
+  f1:
+    level: DEBUG
+    handlers: [f1]
+    propagate: no
+  confusion:
+    level: DEBUG
+    handlers: [confusion]
+    propagate: no

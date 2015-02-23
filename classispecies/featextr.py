@@ -7,17 +7,18 @@ Created on Fri Nov 21 11:44:16 2014
 
 from __future__ import print_function
 
-import sys, os
+import os
 import traceback
 
 import numpy as np
 import scipy
 import scipy.io.wavfile as wav
+import scipy.fftpack
 
 from scipy.cluster.vq import  whiten
 
 from features import mfcc, logfbank, fbank
-from stowell.oskmeans import OSKmeans, normalise_and_whiten
+from stowell.oskmeans import OSKmeans
 
 from multiprocessing.pool import ApplyResult
 from multiprocessing import Pool, cpu_count
@@ -25,52 +26,11 @@ from multiprocessing import Pool, cpu_count
 
 import settings
 from utils import misc, signal as usignal
-from utils.misc import rprint
-from utils.plot import feature_plot
+from utils.misc import rprint, deprecated
+from utils.plot import file_plot
 
+print (os.path.abspath('.'))
 logger = misc.config_logging("classispecies")
-
-def downscale_spectrum(feat, target):
-    ''' feat must be the right way up already (i.e. for fbank and the lot, transpose it first) '''
-
-    out = []
-    no_y, no_x = feat.shape
-    
-    incr = no_x/float(target)
-    
-    for i in range(target):
-        #print "A", feat[:,incr*i:incr*(i+1)]
-        #print "B", mean(feat[:,incr*i:incr*(i+1)], axis=1)[np.newaxis]
-        out.append( np.mean(feat[:,incr*i:incr*(i+1)], axis=1)[np.newaxis].T )
-
-    return np.array(np.hstack(out))
-        
-    
-    
-""" OLD DOWNSCALE SPECTRUM  
-def downscale_spectrum(feat, target):
-    ''' feat must be the right way up already (i.e. for fbank and the lot, transpose it first) '''
-    
-    feats = []
-        
-    no_y, no_x = feat.shape
-    x = range(no_x)
-    bin_counter = 0
-    
-    for bin_ in feat:
-    
-        f = interp1d(x, bin_)
-        xnew = np.arange(target)
-        fx = f(xnew)
-        feats.append(fx)
-        bin_counter += 1
-        
-    return np.array(feats)
-"""
-
-def half2Darray(arr):
-    return arr[:,:arr.shape[1]/2]
-
 
 class FeatureSet(object):
     
@@ -81,6 +41,14 @@ class FeatureSet(object):
     avg_length  = None
     tot_length  = None
     db          = None
+    type        = None
+    
+    def __init__(self, type_, an):
+        
+        assert type_ in ["train", "test"], "Type must be either train or test"
+        
+        self.type = type_
+        self.an   = an.replace(" ", "-") 
     
     def extract(self, soundfiles, labels, analyser=None, highpass_cutoff=None, 
                 normalise=None, n_segments=None, sec_segments=None):
@@ -99,8 +67,10 @@ class FeatureSet(object):
         
         '''
         
+        missingLabels = False
         if labels == None:
-            labels = np.empty( (len(soundfiles), 1) )
+            labels = np.empty( len(soundfiles) )
+            missingLabels = True
             
         new_labels = []
         res = []
@@ -110,7 +80,7 @@ class FeatureSet(object):
         chunk2soundfile   = []
         db = []
         
-        allpicklename = misc.make_output_filename("all", settings.analyser+str(settings.sec_segments or ""),
+        allpicklename = misc.make_output_filename("all-%s-%s" % (self.type, self.an), settings.analyser+str(settings.sec_segments or ""),
                                                        settings.modelname, "pickle", removeext=False)
                                                        
         if not os.path.exists(allpicklename) or settings.FORCE_FEATXTRALL:
@@ -125,6 +95,8 @@ class FeatureSet(object):
             
     #            logger.info( "[%d.00/%d] analysing %s" % (soundfile_counter+1, len(soundfiles), os.path.basename(soundfile) ), end="" )
     #            sys.stdout.flush()
+    
+                #settings.FEATURE_ONEFILE_PLOT = 0 == soundfile_counter # only the first time
                 
                 try:
                     (rate,signal_all) = wav.read(soundfile)
@@ -147,7 +119,8 @@ class FeatureSet(object):
                  
                     
                 else:
-                    signals = np.array([signal_all])
+                    #signals = np.array([signal_all])
+                    signals = [signal_all]
                     
                 # logger.info ("signals:", signals)
                 # logger.info ("secs:", secs)
@@ -159,7 +132,7 @@ class FeatureSet(object):
                 
                     if sec_segments and len(signal) < sec_segments * rate: 
                         continue
-                
+                    
                     chunk2soundfile.append(soundfile_counter)
                     db.append( (soundfile, chunk_counter, len(signal)/float(rate), lab) )
     #                if total_counter % 10000 == 0:
@@ -185,9 +158,15 @@ class FeatureSet(object):
                     
                     chunk_name = "%s%s" % (misc.mybasename(soundfile), ("_c%03d" % chunk_counter if n_segments or sec_segments else ""))
                     
-                        
-                    picklename = misc.make_output_filename(chunk_name, settings.analyser+str(settings.sec_segments or ""),
-                                                           settings.modelname, "pickle", removeext=False)
+                    assert settings.agg != None, "agg should not be none"
+                    params = "%s%s%s%s%s" % ("mel" if settings.extract_mel else "hertz",
+                                                     "-log" if settings.extract_dolog else "",
+                                                     "-dct" if settings.extract_dct else "",
+                                                     "-%s" % settings.agg,
+                                                     "-%.1fsec" % settings.sec_segments if settings.sec_segments else "-entire")
+                    
+                    picklename = misc.make_output_filename("%s-%s" % (chunk_name, params), settings.analyser+str(settings.sec_segments or ""),
+                                                           settings.modelname, "npy", removeext=False)
                     picklenames.append(picklename)
                     
                     if not os.path.exists(picklename) or settings.FORCE_FEATXTR:
@@ -195,12 +174,14 @@ class FeatureSet(object):
                         is_analysing = True
                         
                         if settings.MULTICORE:
-                            #res.append( pool.apply_async(exec_featextr, 
-                            pool.apply_async(exec_featextr,
+                            res.append( pool.apply_async(exec_featextr, 
+                            #x = pool.apply_async(exec_featextr,
+                            #pool.apply_async(exec_featextr,
                                             [soundfile, signal, rate, analyser, picklename,
                                              soundfile_counter, chunk_counter, len(soundfiles), 
-                                             highpass_cutoff, normalise]) 
-                            #)
+                                             highpass_cutoff, normalise])
+                            )
+                            #x.get()
                         else:
                             #res.append( exec_featextr(soundfile, signal, rate, analyser, picklename,
                             exec_featextr(soundfile, signal, rate, analyser, picklename,
@@ -209,8 +190,7 @@ class FeatureSet(object):
                             #)
                           
                     else:
-                        if soundfile_counter % 30 == 0:
-                            rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
+                        rprint( "[%d.%02d/%d] unpickling %s" % (soundfile_counter+1, chunk_counter, len(soundfiles), os.path.basename(picklename) ))
                         is_analysing = False
                         #res.append(misc.load_from_pickle(picklename))
                         
@@ -230,16 +210,27 @@ class FeatureSet(object):
                 soundfile_counter += 1
                 ### end soundfiles loop
                 
-            print() 
-        
-        
             if settings.MULTICORE:
                 pool.close()
                 pool.join()
                 
-            print ("unpickling %d files" % len(picklenames))
+            ## check for exceptions
+            
+            if settings.MULTICORE:
+                for r in res:
+                    r.get()
+                    
+            res = []
+            
+            
+            print ()                
+            logger.debug ("unpickling %d files" % len(picklenames))
             for picklename in picklenames:
-                res.append(misc.load_from_pickle(picklename))
+                try:
+                    res.append(misc.load_from_npy(picklename))
+                except EOFError as e:
+                    print ("EOFError on {}".format(picklename))
+                    raise e
             
                 
             X = [] ## (n_samples x n_features)
@@ -257,24 +248,50 @@ class FeatureSet(object):
                 
                 X.append(x)
     
-            
-            X = np.vstack(X)
+
+#             print (len(X))
+            print ("X[0].shape:", X[0].shape)
+#             for x in X:
+#                 print (x.shape, end=" ")             
+            try:
+                X = np.vstack(X)
+            except ValueError as e: 
+                print (e)
+                for x in X:
+                    print (x.shape)
+                raise
             new_labels = np.vstack(new_labels)
             
-            misc.dump_to_pickle( (X, new_labels, db), allpicklename)
+            #print()
+            #print ("multilabel", settings.MULTILABEL)
+            if settings.MULTILABEL:
+                if missingLabels:
+                    truth_dtype = "1b"
+                else:
+                    truth_dtype = "%db" % labels.shape[1]
+            else:
+                truth_dtype = "S5"
+            
+            #print (str(labels.shape))
+            #print (truth_dtype)
+            
+            #self.db_ = db[:]
+            
+            #print (db[-1])
+            
+            db = np.array(db, dtype=[("soundfile"        , 'S200'), 
+                                     ("chunk_counter"    , int),
+                                     ("length"           , int),
+                                     ("truth"            , truth_dtype)]).view(np.recarray)
+            
+            #misc.dump_to_pickle( (X, new_labels, db), allpicklename)
         
         else:
             X, new_labels, db = misc.load_from_pickle(allpicklename)
 
-        print("\nX.shape[0]: %d, new_labels.shape[0]: %d" % (X.shape[0], new_labels.shape[0]))
-        print()
+        logger.debug("\nX.shape[0]: %d, new_labels.shape[0]: %d" % (X.shape[0], new_labels.shape[0]))
         assert X.shape[0] == new_labels.shape[0]
         logger.info("")
-        
-        db = np.array(db, dtype=[("soundfile"        , 'S200'), 
-                                 ("chunk_counter"    , int),
-                                 ("length"           , int),
-                                 ("truth"            , str(labels.shape[-1])+"S")]).view(np.recarray)
 
         
         self.data = X
@@ -294,7 +311,8 @@ class FeatureSet(object):
     def split(self, soundfiles, cut=0.5):
         
         assert cut*len(self) # must not be 0 or None
-        print (self.labels)
+        
+        np.random.seed(settings.RANDOM_SEED)
         indices = np.random.permutation(len(self))
         idx1, idx2 = indices[:cut*len(self)], indices[cut*len(self):]
         
@@ -309,7 +327,7 @@ class FeatureSet(object):
         train_soundfiles = []
         test_soundfiles  = []
         
-        print ("DBs", len(db1.soundfile), len(db2.soundfile))
+        logger.debug ("DBs train: %d, test: %d" %( len(db1.soundfile), len(db2.soundfile) ))
         
         missing = []
         
@@ -319,22 +337,23 @@ class FeatureSet(object):
             if f in db2.soundfile:
                 test_soundfiles.append(f)
             if f not in db1.soundfile and f not in db2.soundfile:
-                print (f, "missing")
+                logger.warning ("%s missing" % f)
                 missing.append(f)
                 #raise Exception("Soundfile %s doesn't seem to belong to neither train nor test set" % f)
         
-        print ("missing (%d) %s" % (len(missing), missing))
+        if missing:
+            logger.warning ("missing (%d files):\n%s" % (len(missing), missing))
         
-        print ("train soundfiles length:", len(train_soundfiles))
-        print ("test  soundfiles length:", len(test_soundfiles))
+        logger.debug ("train soundfiles length: %d" % len(train_soundfiles))
+        logger.debug ("test  soundfiles length: %d" % len(test_soundfiles))
         
-        fs1 = FeatureSet()
+        fs1 = FeatureSet("train", self.an)
         fs1.db = db1
         fs1.data = data1
         fs1.labels = lab1
         fs1.set_stats()
         
-        fs2 = FeatureSet()
+        fs2 = FeatureSet("test", self.an)
         fs2.db = db2
         fs2.data = data2
         fs2.labels = lab2
@@ -353,7 +372,7 @@ class FeatureSet(object):
     
     
 
-def aggregate_feature(feat, normalise=False):
+def aggregate_feature(feat, normalise=False, axis=0):
     ''' Take any combination of mean, std and max of the given features
     
     according to the parameters in settings. 
@@ -368,6 +387,9 @@ def aggregate_feature(feat, normalise=False):
         
     '''
     
+    if axis == None:
+        raise Exception("Axis cannot be None")
+    
     out_feat = []
     func = {np.nanmean:settings.extract_mean,
             np.nanstd:settings.extract_std,
@@ -379,10 +401,15 @@ def aggregate_feature(feat, normalise=False):
 
     for f in func:
         
-        r = f(feat, axis=0)
+        #print ("\nusing {}\n".format(f.func_name))
+        
+        r = f(feat, axis=axis)
         if settings.whiten_feature:
             r = whiten(r)
         out_feat.append(r)
+        
+    if not out_feat: ## if still empty, take the entire feature set
+        out_feat = feat
         
     feats = np.hstack(out_feat)
     if settings.whiten_features:
@@ -440,7 +467,8 @@ def extract_mel(signal, rate, normalise):
 
     feat = aggregate_feature(slices, normalise)
     return feat
-    
+
+@deprecated
 def extract_melfft(signal, rate, normalise):    
     
     NFFT = 2**14
@@ -461,7 +489,7 @@ def extract_melfft(signal, rate, normalise):
         print ("MELFFT SHAPE:", melfft.shape)
         raise
         
-    return np.hstack(10*np.log10(downscale_spectrum(melfft, 10)))
+    return np.hstack(10*np.log10(usignal.downscale_spectrum(melfft, 10)))
     
     
     d, M = mel_feat.shape
@@ -484,18 +512,34 @@ def extract_melfft(signal, rate, normalise):
     
     return np.hstack( feats )  
 
+@deprecated
 def extract_hertzfft(signal, rate, normalise):
     
-    NFFT = 2**14
+    #NFFT = 2**14
+    NFFT = 128
     
-    frame_size = 256
-    hop        = 256
+    frame_size = settings.NFFT1 #samples
+    hop        = settings.NFFT1-settings.OVERLAP #samples
 
-    hertz_feat = half2Darray(np.abs(usignal.stft2(signal, rate, frame_size, hop))).T
-    hertz_fft  = half2Darray(np.abs(scipy.fft(hertz_feat, n=NFFT)))
+    hertz_feat = usignal.half2Darray(np.abs(usignal.stft_bysamples(signal, rate, frame_size, hop))).T
+    hertz_fft  = usignal.half2Darray(np.abs(scipy.fft(hertz_feat, n=NFFT)))
     
-    return np.hstack(10*np.log10(downscale_spectrum(hertz_fft, 10)))
+    feat = 10*np.log10(#usignal.downscale_spectrum(
+                           usignal.downscale_spectrum(hertz_fft, 10, axis=1), 
+                       #10, axis=0)
+                      )
     
+    if settings.FEATURE_ONEFILE_PLOT:
+        file_plot(signal, rate, feat)
+        settings.FEATURE_ONEFILE_PLOT = False
+        
+    agg = np.hstack(feat)
+    return agg
+
+
+
+
+@deprecated    
 def extract_hertz(signal, rate, normalise):
     
     signal__ = signal
@@ -506,7 +550,7 @@ def extract_hertz(signal, rate, normalise):
     frame_size = 0.0018 # for 1sec of signal, 0.0005 = 22 bins, then divided by two 11 (22)
     hop = 0.003 # also noverlap in specgram, roughly every 128 samples
 
-    hertz_feat = 10*np.log10(usignal.stft(signal, rate, frame_size, hop))
+    hertz_feat = 10*np.log10(usignal.stft_byseconds(signal, rate, frame_size, hop))
     hertz_feat = hertz_feat[:, 0:hertz_feat.shape[1]/2]
     
     slices = slice_spectrum(hertz_feat, settings.delta)
@@ -539,7 +583,107 @@ def extract_oskmeans(signal, rate, normalise):
     assert feat.shape == (1000,)
     print()
     return feat
+
+
+def extract_multiple(signal, rate, normalise, soundfile):
+    
+    normalise = settings.normalise
+    
+    if settings.extract_mel:
+        feat, energy = fbank(signal, samplerate=rate,nfilt=40, 
+                     winlen=settings.NFFT1/float(rate), 
+                     winstep=(settings.NFFT1-settings.OVERLAP)/float(rate),
+                     lowfreq=settings.highpass_cutoff
+                     )
+    else:    
+        frame_size = settings.NFFT1         #samples
+        hop        = settings.NFFT1-settings.OVERLAP #samples
+        #feat = usignal.half2Darray(np.abs(usignal.stft_bysamples(signal, rate, frame_size, hop)))
+        feat = usignal.stft_bysamples_optimised(signal, rate, frame_size, hop)
+        #print ("feat shape", feat.shape)
+        assert feat.shape[1] == 32
+        #print (feat.shape)
+        filter_ = int(settings.highpass_cutoff/(rate)*settings.NFFT1)
+        feat = feat[:,filter_:]
+        #print ("AAA\n", feat.shape)
         
+    if normalise:
+        logger.debug("normalising")
+        feat = usignal.rms_normalise(signal, feat)
+        
+    if settings.extract_dolog:
+        feat = np.clip(np.log(feat), -100, 100)
+    
+    if settings.extract_dct:
+        appendEnergy = True
+
+        dct_ = scipy.fftpack.dct(feat, type=2, axis=1, norm='ortho')[:,:settings.NMFCCS]
+        
+        ## lifter
+        n = np.arange(settings.NMFCCS)
+        lift = 1+ (settings.ceplifter/2)*np.sin(np.pi*n/settings.ceplifter)
+        dct_ = lift*dct_
+        
+        if appendEnergy and settings.extract_mel: dct_[:,0] = np.log(energy) # replace first cepstral coefficient with log of frame energy                    
+        
+        feat = dct_
+        
+    if settings.extract_fft2:
+        
+        feat = usignal.half2Darray(np.abs(scipy.fft(feat, axis=0)), axis=0)
+        
+        _shape_orig = feat.shape
+        
+        rate = float(rate)
+        secs  = len(signal)/rate
+        rate2 = rate/settings.NFFT1/2.
+        upper = settings.mod_cutoff * secs # number of samples in the first 50 Hz of the MOD
+        
+        if settings.extract_logmod:
+            feat = usignal.log_mod(feat, rate, settings.NFFT1)
+        else:
+            feat = usignal.downscale_spectrum(
+    #                     usignal.downscale_spectrum(
+                            feat[0:upper,:],
+    #                     settings.downscale_factor, axis=1),
+                   settings.downscale_factor, axis=0)
+            #print ("\ndownscaled by {}, feat size: {}x{} to {}x{}".format(settings.downscale_factor, *(_shape_orig+feat.shape)), end="")
+        
+        #feat = feat[0:8192,:]
+        if settings.MOD_TAKE1BIN:
+            feat = feat[0,:]
+        
+    # TODO do consistency tests here
+    
+#     print ("before Transpose feature is {}".format(feat.shape))
+    feat = feat.T
+    
+    if settings.FEATURE_ONEFILE_PLOT:
+#         np.savetxt('/tmp/featall.txt', feat)
+#         return
+        #print ("\nfeat shape: {}".format(feat.shape))
+        
+        #print ("upper: %s" %upper)
+        file_plot(signal, rate, feat, soundfile)
+        settings.FEATURE_ONEFILE_PLOT = False
+        #np.savetxt('/tmp/featagg.txt', feat[:,0])
+    
+    agg = aggregate_feature(feat, axis=1)
+    #agg = np.hstack( (feat[:,0], mean_)  )
+    #agg = feat[:,0]
+    #agg = np.hstack( (mean_, feat[:,0]) )
+#     agg = mean_
+#     try:
+#         assert np.all(np.hstack( (std_, mean_) ) == agg)
+#     except AssertionError:
+#         print ("%s\n\n%s" % (np.hstack( (std_, mean_) ), agg))
+#         np.savetxt('/tmp/1.txt', np.hstack( (std_, mean_)))
+#         np.savetxt('/tmp/2.txt', agg)
+#         raise
+    print ("feature is {}".format(agg.shape), end="")
+
+    return agg
+    
 
 def exec_featextr(soundfile, signal, rate, analyser, picklename,
                   soundfile_counter, chunk_counter, n_soundfiles, 
@@ -557,12 +701,15 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
         elif analyser == "hertz-spectrum" : feat = extract_hertz(signal, rate, normalise)
         elif analyser == "hertzfft"       : feat = extract_hertzfft(signal, rate, normalise)
         elif analyser == "oskmeans"       : feat = extract_oskmeans(signal, rate, normalise)
+        elif analyser == "multiple"       : feat = extract_multiple(signal, rate, normalise, soundfile)
         else:
             raise ValueError("Feature extraction method '%s' not known." % analyser)
         
-        misc.dump_to_pickle(feat, picklename)
+        misc.dump_to_npy(feat, picklename)
         
         return feat
     except:
-        
+        print (soundfile, misc.get_an())
         traceback.print_exc()
+        raise
+        

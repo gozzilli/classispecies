@@ -1,47 +1,69 @@
-import os
+# -*- coding: utf-8 -*-
+
 from os.path import expanduser as home
 from classispecies import settings
 
-settings.modelname  = "ukorthoptera"
+settings.modelname = "ukorthoptera"
 settings.MULTILABEL = False
 settings.SPLIT_TRAINING_SET = True
-settings.FORCE_FEATXTR = False
-settings.MULTICORE = True
+settings.FORCE_FEATXTR = True
+settings.FORCE_FEATXTRALL = True
+settings.MULTICORE = False
+settings.n_segments = None
+settings.DUMP_REPORT = False
+settings.normalise = True
 
-settings.SOUNDPATHS['default'] = {
-   'train' : home('~/Dropbox/Shared/Orthoptera Sound App/species_recordings'),
-   'test'  : ''
-}
+
+SOUNDPATHS = {'default' : {
+                   'train' : home('~/Dropbox/Shared/Orthoptera Sound App/species_recordings'),
+                   'test'  : ''
+                }
+            }
     
-from classispecies.utils import misc, makelabels
+from classispecies.utils import makelabels
 
-
-train_labels_csv, test_labels_csv = makelabels.make_labels_from_list_of_files(*makelabels.list_soundfiles())
+soundfiles_ = makelabels.list_soundfiles(SOUNDPATHS)
+train_labels_csv, test_labels_csv = makelabels.make_labels_from_list_of_files(*soundfiles_)
 settings.LABELS = {'default' : {
    'train' : train_labels_csv,
    'test'  : test_labels_csv
 }}
+                            
+## Run one only 
+settings.FEATURES_PLOT = False
+settings.FEATURE_ONEFILE_PLOT = False
+settings.sec_segments = 2.0
+ 
+settings.classifier = "decisiontree"  # 'randomforest'
+settings.analyser = "multiple"
+settings.extract_dct   = False
+settings.extract_dolog = False
+settings.extract_fft2  = True
+settings.extract_mel   = False
+settings.FORCE_FEATXTR = True
+settings.FORCE_FEATXTRALL = True
+settings.agg           = "mod"
 
+settings.FORCE_MULTIRUNNER_RECOMPUTE = True
+settings.downscale_factor = 50
+settings.highpass_cutoff  = 0
+settings.mod_cutoff       = 50
+settings.RANDOM_SEED      = 1234
 
-for analyser in ["hertzfft"]: # "mel-filterbank", "mfcc",
-    for classifier in ["decisiontree"]:
-        for sec_segments in [0.5]:
-            
-            print "=" * 80
-            print "ANALYSER:   %s" % analyser
-            print "CLASSIFIER: %s" % classifier
-            print "SEC SEGM:   %ss" % sec_segments
-            
-            settings.classifier = classifier
-            settings.analyser   = analyser
-            #settings.n_segments = 5
-            settings.sec_segments = sec_segments
-            settings.NMFCCS = 13
-            
-            
-            from classispecies.classispecies import Classispecies
-            class UkOrthopteraModel(Classispecies):
-                pass
-            
-            model = UkOrthopteraModel()
-            model.run()
+from classispecies.classispecies import Classispecies
+class UkOrthopteraModel(Classispecies):
+    pass
+ 
+# model = UkOrthopteraModel()
+# model.run()
+# model.save_to_db()
+
+### Multirun
+
+print "before importing", settings.downscale_factor
+from classispecies.classispecies import multirunner, multiextracter
+print "after importing", settings.downscale_factor
+model = multirunner(UkOrthopteraModel, [2.0], iters=1)
+
+settings.SPLIT_TRAINING_SET = False
+#model = multiextracter(UkOrthopteraModel, [None, 1.0, 2.0], iters=1)

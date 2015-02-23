@@ -16,18 +16,30 @@ from scipy.interpolate import interp1d
 from features import logfbank, fbank
 import wavio
 
-from cs.utils import *
-from cs.plot import gridplot2, gridplot3, plt_savefig, pdfpages_savefig, close
+from cs.plot import gridplot2, gridplot3, gridplot4, plt_savefig, pdfpages_savefig, close
+
+from classispecies.utils.signal import open_audio, half2Darray, stft_bysamples
+
 
 UKORTH_DIR = home("~/Dropbox/Shared/Orthoptera Sound App/species_recordings")
 BL_DIR = home("~/cicada-largefiles/bl-files/all-16bit/")
 BL_DATA = home("~/Dropbox/Uni/DTC1/Insects/BL/datasets/dataset4.xlsx")
 PLOT_METHOD = 3
 
+TEST_FILE = '8kHz wave with 6Hz chirp.wav'
 
-def allplot(wavdir, outfilename, savefig_, NFFT1, NFFT2, OVERLAP, counter=0, total=0, data=None):
+nfc = pd.read_csv('../cicada-train.csv',usecols=(0,), header=None)
+cic = np.ravel(nfc[nfc[0].str.contains("_cicada")].as_matrix())
+rbc = np.ravel(nfc[nfc[0].str.contains("_roesel")].as_matrix())
+dbc = np.ravel(nfc[nfc[0].str.contains("_dark")].as_matrix())
+NFC_DATA = np.concatenate( (cic, rbc, dbc) )
+ 
+
+def allplot(wavdir, outfilename, savefig_, NFFT1, NFFT2, OVERLAP, counter=0, total=0, data=None, limit=None, modelname="nfc3species"):
     
-    for soundfile in ['8kHz wave with 6Hz chirp.wav'] + sorted(os.listdir(wavdir)):
+    allsoundfiles = sorted(os.listdir(wavdir)) if isinstance(wavdir, str) else wavdir
+    #for soundfile in ['8kHz wave with 6Hz chirp.wav'] + sorted(os.listdir(wavdir)):
+    for soundfile in allsoundfiles[0:limit]:
 
         counter += 1
         if not soundfile.lower().endswith(".wav"): continue
@@ -37,7 +49,7 @@ def allplot(wavdir, outfilename, savefig_, NFFT1, NFFT2, OVERLAP, counter=0, tot
 
         try:
             
-            if not '8kHz wave with 6Hz chirp.wav' == soundfile:
+            if not TEST_FILE == soundfile:
                 soundfile = os.path.join(wavdir, soundfile)
                 
             signal, fs, enc = open_audio(soundfile)
@@ -71,7 +83,7 @@ def allplot(wavdir, outfilename, savefig_, NFFT1, NFFT2, OVERLAP, counter=0, tot
                 
             
             if PLOT_METHOD == 3:
-                fig = gridplot3(soundfile, NFFT1, NFFT2, OVERLAP, datum )
+                fig = gridplot4(soundfile, NFFT1, NFFT2, OVERLAP, datum, modelname=modelname )
             
             else:
                 raise NotImplemented
@@ -89,19 +101,22 @@ def allplot(wavdir, outfilename, savefig_, NFFT1, NFFT2, OVERLAP, counter=0, tot
         
 
     
-WAVDIR_OPTS = [('outputs/uk-orthoptera_2xFFT-%02d-all.pdf', UKORTH_DIR, None), 
-               ('outputs/bl-orthoptera_2xFFT-%02d-all.pdf', BL_DIR, BL_DATA)
+WAVDIR_OPTS = [('outputs/nfc-%02d-all.pdf', NFC_DATA, None, "nfc3species"),
+               #('outputs/uk-orthoptera_2xFFT-%02d-all.pdf', UKORTH_DIR, None, "ukorthoptera"), 
+               #('outputs/bl-orthoptera_2xFFT-%02d-all.pdf', BL_DIR, BL_DATA, "blorthoptera")
                ]
-POWER_OPTS  = [8, 9]
+POWER_OPTS  = [8]#[8, 9]
+LIMIT = None
 
 counter = 0
-total = sum([len(os.listdir(wavdir)) for _, wavdir, _ in WAVDIR_OPTS]) * len(POWER_OPTS)
+#total = sum([len(os.listdir(wavdir)) for _, wavdir, _ in WAVDIR_OPTS]) * len(POWER_OPTS)
+total = len(NFC_DATA[0:LIMIT]) + len(os.listdir(UKORTH_DIR)[0:LIMIT])
 
-for pdffilename, wavdir, datafile in WAVDIR_OPTS:
+for pdffilename, wavdir, datafile, modelname in WAVDIR_OPTS:
     for nfft_power in POWER_OPTS:
 
         try:
-            NFFT1 = 256
+            NFFT1 = 64
             OVERLAP = 0
             NFFT2 = NFFT1/2
         
@@ -109,7 +124,7 @@ for pdffilename, wavdir, datafile in WAVDIR_OPTS:
             tempdir = mkdtemp()
             print tempdir
             outfilename = os.path.join(tempdir, "temp_%04d.pdf")
-            allfilename = pdffilename % NFFT2
+            allfilename = pdffilename % NFFT1
             
             if datafile:
                 data = pd.read_excel(datafile)
@@ -117,7 +132,7 @@ for pdffilename, wavdir, datafile in WAVDIR_OPTS:
                 data = None
         
         
-            allplot(wavdir, outfilename, plt_savefig, NFFT1, NFFT2, OVERLAP, counter=counter, total=total, data=data)
+            allplot(wavdir, outfilename, plt_savefig, NFFT1, NFFT2, OVERLAP, counter=counter, total=total, data=data, limit=LIMIT, modelname=modelname)
         
         finally:
             

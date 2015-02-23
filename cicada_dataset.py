@@ -5,6 +5,9 @@ Created on Mon Nov 17 15:57:07 2014
 @author: Davide Zilli
 """
 
+import os
+import pandas as pd
+
 cicada_dataset = [
 "/home/dz2v07/cicada-largefiles/cicada-recordings/2013/cicadahunt/sounds/5546_cicada.wav",
 "/home/dz2v07/cicada-largefiles/cicada-recordings/2013/cicadahunt/sounds/5223_cicada.wav",
@@ -241,4 +244,35 @@ cicada_dataset = [
 "/home/dz2v07/cicada-largefiles/cicada-recordings/2013/cicadahunt/sounds/5549_cicada.wav",
 "/home/dz2v07/cicada-largefiles/cicada-recordings/2013/cicadahunt/sounds/4892_silent.wav",
 "/home/dz2v07/cicada-largefiles/cicada-recordings/2013/cicadahunt/sounds/7838_roesel.wav",
+
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1023_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1024_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1025_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1026_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1027_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1028_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1029_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1030_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1031_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1032_dark.wav',
+'/home/dz2v07/Dropbox/Uni/DTC1/projects/cicada-detect/src/static_sounds/1033_dark.wav',
 ]
+
+CLASSES = {'cic' : 99, 
+           'roe' : 15,
+           'dar' : 16,
+           'sil' : "sil"}
+
+
+exclude = ["sil"]
+rows = []
+for file_ in cicada_dataset:
+    class_ = CLASSES[os.path.basename(file_).split("_")[1][0:3]]
+    if class_ in exclude: continue
+    rows.append((file_, class_))
+
+df = pd.DataFrame(rows, columns=("file", "class"))
+
+print df["class"].value_counts()
+
+df.to_csv('cicada-train.csv', header=None, index=None)

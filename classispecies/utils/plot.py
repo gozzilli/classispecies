@@ -5,13 +5,16 @@ Created on Thu Nov 20 14:49:28 2014
 @author: Davide Zilli
 """
 
+import os
 from classispecies.utils import misc
 from classispecies import settings
+from classispecies.utils.signal import downscale_spectrum
+import numpy as np
 
-if settings.PLOT:
-    import matplotlib
-    matplotlib.use(settings.MPL_BACKEND)
-    from matplotlib import pyplot as plt, cm
+if not settings.is_mpl_backend_set():
+    settings.set_mpl_backend()
+
+from matplotlib import pyplot as plt, cm
 
 
 def classif_plot(labels_testing, prediction):
@@ -41,14 +44,40 @@ def classif_plot(labels_testing, prediction):
 
     # fig.savefig(misc.make_output_filename("classifplot", "classify", settings.modelname, settings.MPL_FORMAT), dpi=150)
     outfilename = misc.make_output_filename("classifplot", "classify", settings.modelname, settings.MPL_FORMAT)
-    misc.plot_or_show(fig, filename=outfilename)
+    misc.plot_or_show(fig, pdffilename=outfilename)
 
-def feature_plot(data_training, modelname, format_):   
+def feature_plot(data_training, modelname, format_):
+    
     fig = plt.figure()
-    plt.pcolormesh(data_training, rasterized=True)
+    if data_training.shape[1] > 2000:
+        d = downscale_spectrum(data_training, 1000)
+    else: 
+        d = data_training
+        
+    #print "feature plot: %s (plotted at %s)" % (data_training.shape, d.shape)
+    plt.pcolormesh(d, rasterized=True)
     plt.autoscale(tight=True)
     plt.xlabel("feature")
     plt.ylabel("sound file")
     outfilename = misc.make_output_filename("features", "featxtr", modelname, format_)
 
-    misc.plot_or_show(fig, filename=outfilename)
+    misc.plot_or_show(fig, pdffilename=outfilename)
+    
+def file_plot(signal, rate, feat, soundfile):
+    feat = feat.copy()
+    fig = plt.figure( figsize=(10,4) )
+    plt.subplot(121)
+    plt.specgram(signal, Fs=rate, NFFT=settings.NFFT1, noverlap=0, rasterized=True)
+    plt.autoscale(tight=True)
+    plt.xlabel("Time (sec)")
+    plt.ylabel("Freq (Hz)")
+    plt.suptitle("%s :: %s" % (misc.get_an(), os.path.basename(soundfile)), fontsize=8)
+    
+    feat = downscale_spectrum(downscale_spectrum(feat, 500, axis=1), 50, axis=0)
+    plt.subplot(122)
+    plt.pcolormesh(10*np.log10(feat), rasterized=True)
+    plt.autoscale(tight=True)
+    
+    outfilename = misc.make_output_filename("features-onefile-%d" %os.getpid(), "featxtr", settings.modelname, "pdf")#settings.MPL_FORMAT)
+
+    misc.plot_or_show(fig, pdffilename=outfilename)

@@ -17,12 +17,13 @@ from sklearn.preprocessing import label_binarize
 logger = misc.config_logging("makelabels")
 
 
-def list_soundfiles():
+def list_soundfiles(soundpaths):
     ''' Select files in soundpath '''
 
     def extract(set_):
         soundfiles = []
-        for root, subFolders, files in os.walk(misc.get_soundpath(set_=set_)):
+        print set_
+        for root, subFolders, files in os.walk(misc.get_soundpath(soundpaths, set_=set_)):
             logger.info ("%s files in %s" % (set_, root))
 
             for file_ in files:
@@ -35,11 +36,11 @@ def list_soundfiles():
         if not soundfiles:
             raise Exception("No sound file selected")
 
-        return soundfiles
+        return np.array(soundfiles)
 
     train_soundfiles = extract("train")
     
-    if misc.get_soundpath(set_="test"):
+    if misc.get_soundpath(soundpaths, set_="test"):
         test_soundfiles  = extract("test")
     
     else:
@@ -47,10 +48,8 @@ def list_soundfiles():
 
     #basesoundfiles = [os.path.basename(x) for x in soundfiles]
 
-    return np.array(train_soundfiles), np.array(test_soundfiles)
+    return train_soundfiles, test_soundfiles
 
-
-#def make_labels_from_filename(soundfiles):
 def make_labels_from_list_of_files(train_soundfiles, 
                                    test_soundfiles=None, 
                                    modelname=settings.modelname, 
@@ -71,12 +70,11 @@ def make_labels_from_list_of_files(train_soundfiles,
         np.savetxt(outfilename, labels, delimiter=",", fmt='"%s"'
                 # fmt="%s", comments = '', header= ",".join(["label"] + ...)
                 )
-    
+                
     out_trainlabels = "%s-train.csv" % modelname
     make(train_soundfiles, out_trainlabels)
 
-    
-    if test_soundfiles:
+    if test_soundfiles != None:
         out_testlabel = "%s-test.csv" % modelname
         make(train_soundfiles, out_testlabel)
     else:

@@ -1,0 +1,79 @@
+<!doctype html>
+
+<head>
+	<script type="text/javascript" src="https://code.jquery.com/jquery-1.11.2.js"></script>
+	<title>Model results</title>
+	<style>
+		body {
+			font-family: "Helvetica Neue", Helvetica;
+		}
+		table td, th {
+			text-align: center;
+			border: 1px solid #ddd;
+			border-left: 1px solid #ddd;
+			padding: 5px;
+			
+			white-space: nowrap;
+  			overflow: hidden;
+  			text-overflow: ellipsis;
+  			max-width: 100px;
+		}
+		
+		table th {
+			background-color: #eee;
+			max-width: 200px;
+		}
+		table.results {
+			border-collapse: collapse;
+			table-layout: fixed;
+		}
+	</style>
+</head>
+
+<body>
+<div>
+	<button id="transpose">Transpose</a>
+</div>
+<table class="results">
+    <thead>
+    	<tr>
+    		{% for item in rows[0].keys()|sort %}
+    		<th>{{item}}</th>
+    		{% endfor %}
+    	</tr>
+    	
+   	</thead>
+    <tbody>
+    {% for row in rows %}
+    <tr>
+		{% for key in row.keys()|sort %}
+		<td>{{ row[key] }}</td>
+		{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<script type="text/javascript">
+$("button#transpose").click(function(){
+	$("table").each(function() {
+	    var $this = $(this);
+	    var newrows = [];
+	    $this.find("tr").each(function(){
+	        var i = 0;
+	        $(this).find("th,td").each(function(){
+	            i++;
+	            if(newrows[i] === undefined) { newrows[i] = $("<tr></tr>"); }
+	            newrows[i].append($(this));
+	        });
+	    });
+	    $this.find("tr").remove();
+	    $.each(newrows, function(){
+	        $this.append(this);
+	    });
+	});
+
+    return false;
+});
+</script>
+</body>

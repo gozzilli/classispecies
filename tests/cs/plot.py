@@ -1,22 +1,34 @@
+# -*- coding: utf-8 -*-
+
+import sys
+sys.path = ['..'] + sys.path
+
+import os.path
 import re
 import pandas as pd
 
 import numpy as np
-import scipy
+import scipy.fftpack
 
 import matplotlib
 matplotlib.use('pdf')
-from matplotlib.backends.backend_pdf import PdfPages
+from classispecies.utils.misc import load_from_npy, mybasename,\
+    get_output_filename
+from classispecies.utils.signal import downscale, downscale_spectrum, half2Darray, stft_bysamples, open_audio, stft_bysamples_optimised, log_mod
+
 from matplotlib import pyplot as plt
-from matplotlib.pylab import *
 
 from features import fbank, mfcc
 
-huyrc = matplotlib.rc_params_from_file('/home/dz2v07/.config/matplotlib/matplotlibrc.huy')
+huyrc = matplotlib.rc_params_from_file('/home/dz2v07/.config/matplotlib/matplotlibrc.nocomment.huy')
+matplotlib.rcParams.update(huyrc)
 
-from utils import downscale, downscale_spectrum, half2Darray, stft_bysamples, open_audio
+from classispecies import settings
+settings.OUTPUT_DIR = '../outputs2'
 
 def make_suptitle(fig, datum, filename):
+    fontsize=20 
+    y=0.97
     if isinstance(datum, pd.Series):
         fig.suptitle(re.sub(r'[ ]+,', ',', "%s %s %s %s %s" % (datum.species_eng if not pd.isnull(datum.species_eng) else "undefined", 
                                     "(%s)" % datum.species_latin if not pd.isnull(datum.species_latin) else "",
@@ -24,20 +36,22 @@ def make_suptitle(fig, datum, filename):
                                     "- %s" % datum.location if not pd.isnull(datum.location) else "",
                                     ", %s" % int(datum.year) if not pd.isnull(datum.year) else "",
                                     #"[%s]" % datum.sound if not pd.isnull(datum.sound) else ""
-                                    )), y=0.98, fontsize=16)
+                                    )), y=y, fontsize=fontsize)
         plt.text(1.0, 1.2, datum.sound,
             horizontalalignment='right',
             verticalalignment='top',
-            transform=ax.transAxes,
+            transform=plt.gca().transAxes,
             fontsize=9)
     else:
-        fig.suptitle(re.sub("\.wav", "", filename, flags=re.IGNORECASE), fontsize=16, y=0.98)
-### deprecated. Use gridplot2 instead
+        fig.suptitle(re.sub("\.wav", "", os.path.basename(filename).replace("_", " "), flags=re.IGNORECASE), y=y, fontsize=fontsize)
+
 def gridplot1(filename, signal, fs, melfft, hertzfft, NFFT):
     '''
     Small waveform, large spectrogram
     Deprecated. Use gridplot2 instead
     '''
+    
+    LOG = False
     
     fig = plt.figure(figsize=(25,5), dpi=150)
     fig.subplots_adjust(hspace=0.2,)
@@ -81,8 +95,8 @@ def gridplot1(filename, signal, fs, melfft, hertzfft, NFFT):
     #    hertzfft = downscale_spectrum(hertzfft, 500)    
         
     if LOG:
-        melfft = 10*log10(melfft)
-        hertzfft = 10*log10(hertzfft)
+        melfft = 10*np.log10(melfft)
+        hertzfft = 10*np.log10(hertzfft)
 
     
     ax = ax3
@@ -115,9 +129,7 @@ def gridplot1(filename, signal, fs, melfft, hertzfft, NFFT):
     #plt.show()
     #plt.close()
         
-    # print "finished %s" % name
-    
-    
+    # print "finished %s" % nam    
 def gridplot2(filename, signal, fs, melfft, hertzfft, NFFT1, NFFT2, datum=None):
     '''
     Small waveform, large spectrogram
@@ -185,11 +197,11 @@ def gridplot2(filename, signal, fs, melfft, hertzfft, NFFT1, NFFT2, datum=None):
 
     stopfreq = float(fs)/NFFT1/2
     
-    y = linspace(0, melfft.shape[0], melfft.shape[0]+1)
-    x = linspace(0, stopfreq, melfft.shape[1]+1)
+    y = np.linspace(0, melfft.shape[0], melfft.shape[0]+1)
+    x = np.linspace(0, stopfreq, melfft.shape[1]+1)
     
     ax = ax3
-    _ = ax.pcolormesh(x, y, 10*log10(melfft), rasterized=True)
+    _ = ax.pcolormesh(x, y, 10*np.log10(melfft), rasterized=True)
     #ax.set_xlim( (0,NFFT/2) )
     ax.autoscale(tight=True)
     ax.set_xlabel("Chirp frequency (Hz)")
@@ -202,11 +214,11 @@ def gridplot2(filename, signal, fs, melfft, hertzfft, NFFT1, NFFT2, datum=None):
     ax.tick_params(labelbottom='off') # labels along the bottom edge are off
     
     
-    x = linspace(0, stopfreq, hertz500.shape[1]+1)
-    y = linspace(0, fs/2/1000., NFFT1/2+1)
+    x = np.linspace(0, stopfreq, hertz500.shape[1]+1)
+    y = np.linspace(0, fs/2/1000., NFFT1/2+1)
     
     ax = ax5
-    _ = ax.pcolormesh(x, y, 10*log10(hertz500), rasterized=True)
+    _ = ax.pcolormesh(x, y, 10*np.log10(hertz500), rasterized=True)
     #ax.set_xlim( (0,NFFT/2) )
     ax.autoscale(tight=True)
     ax.set_xlabel("Chirp frequency (Hz)")
@@ -218,10 +230,10 @@ def gridplot2(filename, signal, fs, melfft, hertzfft, NFFT1, NFFT2, datum=None):
     ax.set_title("FFT of hertz spectrum (max 500 bins)")
     ax.tick_params(labelbottom='off') # labels along the bottom edge are off
     
-    x = linspace(0, stopfreq, hertz10.shape[1]+1)
+    x = np.linspace(0, stopfreq, hertz10.shape[1]+1)
 
     ax = ax7
-    _ = ax.pcolormesh(x, y, 10*log10(hertz10), rasterized=True)
+    _ = ax.pcolormesh(x, y, 10*np.log10(hertz10), rasterized=True)
     #ax.set_xlim( (0,NFFT/2) )
     ax.autoscale(tight=True)
     ax.set_xlabel("Chirp frequency (Hz)")
@@ -235,10 +247,10 @@ def gridplot2(filename, signal, fs, melfft, hertzfft, NFFT1, NFFT2, datum=None):
     ax.tick_params(labelbottom='off') # labels along the bottom edge are off
     
     
-    x = linspace(0, stopfreq/10., hertz10_10.shape[1])
+    x = np.linspace(0, stopfreq/10., hertz10_10.shape[1])
 
     ax = ax9
-    _ = ax.pcolormesh(x, y, 10*log10(hertz10_10), rasterized=True)
+    _ = ax.pcolormesh(x, y, 10*np.log10(hertz10_10), rasterized=True)
     #ax.set_xlim( (0,NFFT/2) )
     ax.autoscale(tight=True)
     ax.set_xlabel("Chirp frequency (Hz)")
@@ -271,20 +283,6 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
     BG_ON_WAVEFORM = False
     PLOT_WAVEFORM  = False
     
-    def make_title(mel, log, dct, feat):
-        if dct == None:
-            dct = ""
-        elif dct == True:
-            dct = "dct"
-        else:
-            dct = "fft"
-    
-        return re.sub(' +', ' ', "%s %s %s %s" % ("mel" if mel else "hertz",
-            "log" if log else "",
-            dct,
-            "[{}x{}]".format(*feat.shape)
-            ))
-
     signal, fs, enc = open_audio(filename)
         
     mel_spectrum, energy = fbank(signal, samplerate=fs,nfilt=40, 
@@ -305,7 +303,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
     
     if BG_ON_FEATURES:            
         ax = plt.subplot2grid( gridsize, (2, 4))
-        rec = Rectangle((-4.8,-3.5),6,4.7,fill=True, color="green", alpha=0.1, lw=0)
+        rec = plt.Rectangle((-4.8,-3.5),6,4.7,fill=True, color="green", alpha=0.1, lw=0)
         rec = ax.add_patch(rec)
         rec.set_clip_on(False)
         ax.axis('off')
@@ -328,7 +326,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
         
         if BG_ON_WAVEFORM:
         
-            rec = Rectangle((-0.2,np.min(d_signal)-0.6),np.max(d_time)+0.3,np.max(d_signal)*2+1.0,fill=True, color="yellow",lw=0, alpha=0.2)
+            rec = plt.Rectangle((-0.2,np.min(d_signal)-0.6),np.max(d_time)+0.3,np.max(d_signal)*2+1.0,fill=True, color="yellow",lw=0, alpha=0.2)
             rec = ax.add_patch(rec)
             rec.set_clip_on(False)
     
@@ -340,7 +338,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
                      winlen=NFFT1/float(fs), 
                      winstep=(NFFT1-OVERLAP)/float(fs),
                      numcep=numcep).T
-    t1 = linspace(0, len(signal)/float(fs), feat.shape[1]+1)
+    t1 = np.linspace(0, len(signal)/float(fs), feat.shape[1]+1)
     ycep = np.linspace(0, numcep, numcep+1)
     
     ax = plt.subplot2grid( gridsize, (row, col))
@@ -348,13 +346,13 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
     _ = ax.autoscale(tight=True)
     _ = ax.set_title("mfcc [{}x{}]".format(*feat.shape))
     
-    x = linspace(0, fs/2./1000, feat.shape[0])
+    x = np.linspace(0, fs/2./1000, feat.shape[0])
     row = 3
     max_ = np.max(feat, axis=1)
     ax = plt.subplot2grid( gridsize, (3, col)) # 
     _ = ax.plot(x, max_)
     _ = ax.autoscale(tight=True)
-    _ = ax.set_title("max")
+    _ = ax.set_title("max [%d]" % len(max_))
     _ = ax.set_ylabel("Magnitude") if col == 0 else None
     _ = ax.set_xlabel("Freq (kHz)")
     
@@ -365,7 +363,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
     _ = ax.plot(x, mean_)
     _ = ax.plot(x, std_)
     _ = ax.autoscale(tight=True)
-    _ = ax.set_title(u"$\mu$, $\sigma$")
+    _ = ax.set_title(u"$\mu$, $\sigma$ [%d]" % len(mean_))
     _ = ax.set_ylabel("Magnitude") if col == 0 else None
     _ = ax.set_xlabel("Freq (kHz)")
     
@@ -385,11 +383,11 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
                     feat = hertz_spectrum.copy()
     
     
-                t  = linspace(0, len(signal)/float(fs), len(signal))
-                t1 = linspace(0, len(signal)/float(fs), feat.shape[0]+1) # time for time-freq spectra
-                f1 = linspace(0, fs/2./1000, feat.shape[1]+1)                 # freq fft1 (0, 22050, 128)
+                t  = np.linspace(0, len(signal)/float(fs), len(signal))
+                t1 = np.linspace(0, len(signal)/float(fs), feat.shape[0]+1) # time for time-freq spectra
+                f1 = np.linspace(0, fs/2./1000, feat.shape[1]+1)                 # freq fft1 (0, 22050, 128)
                 def f2(myfeat):
-                    return linspace(0, stopfreq_fft2, myfeat.shape[1]+1)         # freq fft2 (0, 86, 64)
+                    return np.linspace(0, stopfreq_fft2, myfeat.shape[1]+1)         # freq fft2 (0, 86, 64)
                 ycep = np.linspace(0, numcep, numcep+1)
                 
                 if log:
@@ -427,7 +425,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
                 else:
                     row = 2  
         
-                    mod_ = half2Darray(abs(scipy.fft(feat, n=NFFT2, axis=0)).T)
+                    mod_ = half2Darray(np.abs(scipy.fft(feat, n=NFFT2, axis=0)).T)
                     
                     ax = plt.subplot2grid( gridsize, (row, col)) # 
                     _ = ax.pcolormesh(f2(mod_), f1, mod_, rasterized=True)
@@ -457,13 +455,13 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
             _ = ax.set_xlabel("Time (s)")
             _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
     
-            x = linspace(0, fs/2./1000, feat.shape[0])
+            x = np.linspace(0, fs/2./1000, feat.shape[0])
             row = 3
             max_ = np.max(feat, axis=1)
             ax = plt.subplot2grid( gridsize, (row, col)) # 
             _ = ax.plot(x, max_)
             _ = ax.autoscale(tight=True)
-            _ = ax.set_title("max")
+            _ = ax.set_title("max [{}]".format(len(max_)))
             _ = ax.set_ylabel("Magnitude") if col == 0 else None
             _ = ax.set_xlabel("Freq (kHz)")
     
@@ -474,7 +472,7 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
             _ = ax.plot(x, mean_)
             _ = ax.plot(x, std_)
             _ = ax.autoscale(tight=True)
-            _ = ax.set_title(u"$\mu$, $\sigma$")
+            _ = ax.set_title(u"$\mu$, $\sigma$ [{}]".format(len(mean_)))
             _ = ax.set_ylabel("Magnitude") if col == 0 else None
             _ = ax.set_xlabel("Freq (kHz)")
             
@@ -482,10 +480,263 @@ def gridplot3(filename, NFFT1, NFFT2, OVERLAP, datum):
     
     return fig
                 
+def get_data(filename, mel, log, dct, agg, sec_segments=None, reshape=None, verbose=False, modelname="nfc3species"):
+    params = "%s%s%s%s%s" % ("mel" if mel else "hertz",
+                             "-log" if log else "",
+                             "-dct" if dct else "",
+                             "-%s" % agg,
+                             #"-%s" % sec_segments,
+                             "-%.1fsec" % sec_segments if sec_segments else "-entire",
+                             )
+
+    picklename = get_output_filename("%s-%s" % (mybasename(filename), params), 
+                                     "multiple" + ("%.1f" %sec_segments if sec_segments else ""),
+                                               modelname, "npy", removeext=False)
+    
+    if verbose:
+        print u"extracting {}".format(os.path.basename(picklename))
+    data = load_from_npy(picklename)
+    
+    if reshape != None:
+        assert len(reshape) == 2, "Reshape must be a 2-element tuple"
+        #reshape = (reshape[0], min(reshape[1], 8192))
+        try:
+            data = data.reshape(*reshape)
+        except ValueError as e:
+            raise ValueError("Trying to reshape {} into {}: {}".format(data.shape, reshape, e))
+    
+    return data
+
+def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
+
+    def make_title(mel, log, dct, feat):
+        if dct == None:
+            dct = ""
+        elif dct == True:
+            dct = "dct"
+        else:
+            dct = ""
+    
+        return re.sub(' +', ' ', "%s %s %s %s" % ("mel" if mel else "hertz",
+            "log" if log else "",
+            dct,
+            "[{}x{}]".format(*feat.shape)
+            ))        
+    ### deprecated. Use gridplot2 instead    
+
+
+    signal, fs, _ = open_audio(filename)
+    #signal = signal[0:5*44100]
+        
+    mel_spectrum, energy = fbank(signal, samplerate=fs,nfilt=40, 
+                     winlen=NFFT1/float(fs), 
+                     winstep=(NFFT1-OVERLAP)/float(fs)
+                     )
+    
+    frame_size = NFFT1 #samples
+    hop        = NFFT1-OVERLAP #samples
+    #hertz_spectrum = half2Darray(np.abs(stft_bysamples(signal, fs, frame_size, hop)))
+    hertz_spectrum = stft_bysamples_optimised(signal, fs, frame_size, hop)
+    
+    fig, axes = plt.subplots(7, 8, figsize=(40,30), dpi=150)
+    fig.subplots_adjust(hspace=0.5, wspace=0.1)
+    
+
+    numcep = 13
+    stopfreq_fft2 = float(fs)/NFFT1/2
+    START_FREQ = float(fs)/2./1000.*10/(NFFT1/2) ## 22.05*10/32
+    
+    print "START FREQ:", START_FREQ
+    
+    
+    for mel in [False, True]:
+        
+        for log in [False, True]:
+            
+            for dct in [False, True]:
+                
+                nfeat = None
+                row = 0
+                col = int(log)+2*int(dct)+4*int(mel)
+                
+                #print "%s %s%s%s" % (os.path.basename(filename), "mel" if mel else "hertz", "-log" if log else "", "-dct" if dct else "")
+                
+                if mel:
+                    feat = mel_spectrum.copy()
+                else:
+                    feat = hertz_spectrum.copy()
+                    
+                t  = np.linspace(0, len(signal)/float(fs), len(signal))
+                t1 = np.linspace(0, len(signal)/float(fs), feat.shape[0]+1) # time for time-freq spectra
+                def f_yaxis(myfeat, start=0, end=fs/2./1000, axis=0):
+                    return np.linspace(start, end, myfeat.shape[axis]+1)                 # freq fft1 (0, 22050, 128)
+                #f_yaxis = np.linspace(0, fs/2./1000, feat.shape[1]+1)                 # freq fft1 (0, 22050, 128)
+                def f_xaxis(myfeat):
+                    return np.linspace(0, stopfreq_fft2, myfeat.shape[1]+1)         # freq fft2 (0, 86, 64)
+                
+                ycep = np.linspace(0, numcep, numcep+1)
+                
+                x = t1
+                y = None    
+                
+                    
+                if log:
+                    feat = np.clip(np.log(feat), -100, 100)
+                    
+                xlab = "Time (s)"
+                if dct:
+                    
+
+                    y = ycep
+                    
+                    ylab = "Freq coefficient"
+                    
+                    mod_shape0 = numcep
+                    
+                    appendEnergy = True
+                    ceplifter = L = 22 # @UnusedVariable
+                    
+                    dct_ = scipy.fftpack.dct(feat, type=2, axis=1, norm='ortho')[:,:numcep]
+                    
+                    ## lifter
+                    nframes,ncoeff = np.shape(dct_) # @UnusedVariable
+                    n = np.arange(ncoeff)
+                    lift = 1+ (L/2)*np.sin(np.pi*n/L)
+                    dct_ = lift*dct_
+                    
+                    if appendEnergy and mel: dct_[:,0] = np.log(energy) # replace first cepstral coefficient with log of frame energy                    
+                    
+                    #dct_ = dct_.T
+                    feat = dct_
+                else:
+                    ylab = "Freq (kHz)"
+    
+                
+                feat = feat.T
+                    
+                
+                d_feat = downscale_spectrum(feat, 500)
+                
+                if dct:
+                    nfeat = numcep
+                else:
+                    if mel: 
+                        nfeat = 40
+                        y = np.arange(0, nfeat+1)
+                    else:
+                        nfeat = 22
+                        y = np.linspace(0, fs/2./1000, d_feat.shape[0]+1)
+                    
+                    
+                    
+                x = np.linspace(0, len(signal)/float(fs), d_feat.shape[1]+1)
+#                 print "d_feat.shape:", d_feat.shape
+#                 print "x.shape:     ", x.shape 
+#                 print "nfeat", nfeat
+#                 print make_title(mel, log, dct, feat)                
+
+                if not log:
+                    d_feat = 10*np.log10(d_feat)
+
+                
+                ### spectrum                     
+                row = 0
+                ax = axes[row, col]
+                _ = ax.pcolormesh(x, y, d_feat, rasterized=True)
+                _ = ax.autoscale(tight=True)
+                _ = ax.set_title(make_title(mel, log, dct, feat))
+                _ = ax.set_xlabel(xlab)
+                _ = ax.set_ylabel(ylab) if col == 0 else None
+                _ = ax.grid(True)
+                    
+                ## MOD
+                
+                #mod_ = get_data(filename, mel, log, dct, "mod", reshape=(mod_shape0, 64))
+                #mod_ = 10*np.log10(half2Darray(np.abs(scipy.fft(feat, axis=1)), axis=1))
+                mod_ = get_data(filename, mel, log, dct, "mod", reshape=(nfeat, feat.shape[1]/2), verbose=True, modelname=modelname)
+                d_mod_ = downscale_spectrum(mod_, 500)
+                
+                row += 1
+                ax = axes[row, col]
+                _ = ax.pcolormesh(f_xaxis(d_mod_), f_yaxis(d_mod_, start=START_FREQ), 10*np.log10(d_mod_), rasterized=True)
+                _ = ax.autoscale(tight=True)            
+                _ = ax.set_title("MOD [{}x{}] [{}xd{}]".format(*(mod_.shape+d_mod_.shape)))
+                _ = ax.set_xlabel("Modulation freq (Hz)")
+                _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
+                _ = ax.grid(True)
+                
+                
+                ## MOD 10
+                
+                mod10 = mod_[:,0:mod_.shape[1]/10]
+                d_mod10 = downscale_spectrum(mod10, 500)
+                x = np.linspace(0, stopfreq_fft2/10, d_mod10.shape[1]+1)
+                
+                row += 1
+                ax = axes[row, col]
+                _ = ax.pcolormesh(x, f_yaxis(d_mod10, start=START_FREQ), 10*np.log10(d_mod10), rasterized=True)
+                _ = ax.autoscale(tight=True)            
+                _ = ax.set_title("MOD10 [{}x{}] [{}xd{}]".format(*(mod10.shape+d_mod10.shape)))
+                _ = ax.set_xlabel("Modulation freq (Hz)")
+                _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
+                _ = ax.grid(True)                
+
+                
+                mod_logged = log_mod(mod_, fs, NFFT1, nbins=48)
+                ## LOG MOD
+                row += 1
+                ax = axes[row, col]
+                _ = ax.pcolormesh(x, f_yaxis(mod_logged, start=START_FREQ), 10*np.log10(mod_logged), rasterized=True)
+                _ = ax.autoscale(tight=True)            
+                _ = ax.set_title("LOG MOD [{}x{}]".format(*mod_logged.shape))
+                _ = ax.set_xlabel("Modulation freq (Hz)")
+                _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
+                _ = ax.grid(True)
+                
+                
+                row += 1
+                #mod0 = get_data(filename, mel, log, dct, "mod0", verbose=True, modelname=modelname)
+                mod0 = mod_[:,0]                
+                x = np.linspace(START_FREQ, fs/2./1000, len(mod0))
+                ax = axes[row, col] 
+                _ = ax.plot(x, mod0)
+                _ = ax.autoscale(tight=True, axis="x")
+                _ = ax.set_title("MOD[0] [{}]".format(len(mod0)))
+                _ = ax.set_ylabel("Magnitude") if col == 0 else None
+                _ = ax.set_xlabel("Freq (kHz)")
+                
+                row += 1
+                meanstd = get_data(filename, mel, log, dct, u"μ+σ", modelname=modelname)
+                assert len(meanstd) == 2*nfeat, "len(meanstd): %s, 2*nfeat: %s" % (str(len(meanstd)), str(2*nfeat))
+                mean_ = meanstd[nfeat:]
+                std_  = meanstd[:nfeat]
+                ax = axes[row, col]  
+                _ = ax.plot(x, mean_, label="$\mu$")
+                _ = ax.plot(x, std_, label="$\sigma$")
+                _ = ax.autoscale(tight=True, axis="x")
+                _ = ax.set_title(u"$\mu$, $\sigma$ [{}]".format(len(mean_)))
+                _ = ax.set_ylabel("Magnitude") if col == 0 else None
+                _ = ax.set_xlabel("Freq (kHz)")
+                _ = ax.legend(loc="upper left") if col == 0 else None
+
+                row += 1                
+                max_ = get_data(filename, mel, log, dct, "max", modelname=modelname)
+                ax = axes[row, col] 
+                _ = ax.plot(x, max_)
+                _ = ax.autoscale(tight=True, axis="x")
+                _ = ax.set_title("max [{}]".format(len(max_)))
+                _ = ax.set_ylabel("Magnitude") if col == 0 else None
+                _ = ax.set_xlabel("Freq (kHz)")
+        
+                
+            
+    make_suptitle(fig, datum, filename)
+    
+    return fig
     
 
 def pdfpages_savefig(filename):
-    pdf.savefig()
+    pdf.savefig()  # @UndefinedVariable
     
 def plt_savefig(filename):
     plt.savefig(filename)

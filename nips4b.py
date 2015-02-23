@@ -1,39 +1,47 @@
 from classispecies import settings
 
-settings.SOUNDPATHS.update({
-    'Boa' :
-        { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
-          #'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
-          'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/test',
-        },
-    })
-settings.LABELS = {
-    'Boa' :
-        { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
-          #'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
-          'test'  : '',
-        },
-    }
+# settings.SOUNDPATHS.update({
+#     'Boa' :
+#         { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
+#           #'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/train',
+#           'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_TEST_WAV/test',
+#         },
+#     })
+# settings.LABELS = {
+#     'Boa' :
+#         { 'train' : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
+#           #'test'  : '/home/dz2v07/cicada-largefiles/NIPS4B/NIPS4B_BIRD_CHALLENGE_TRAIN_LABELS/numero_file_train.csv',
+#           'test'  : '',
+#         },
+#     }
 
 
 settings.modelname  = "nips4b"
-settings.classifier = "randomforest"
+settings.classifier = "decisiontree" #randomforest"
 settings.analyser   = "hertzfft" #"melfft" #hertz-spectrum" #"oskmeans" 
 
 settings.SPLIT_TRAINING_SET = True
 settings.FORCE_FEATXTR = True
+settings.FORCE_FEATXTRALL = True
 settings.MULTILABEL = True
-settings.MULTICORE  = True
+settings.MULTICORE  = False
 
-settings.extract_mean = True
+settings.extract_mean = False
 settings.extract_std  = False
 
-settings.sec_segments = 1.0
+settings.sec_segments = 0.5
 settings.n_segments   = None
 
+settings.FEATURES_PLOT = False
 
-from classispecies.classispecies import Classispecies
+
+from classispecies.classispecies import Classispecies, multirunner
 from classispecies.utils import misc
+
+settings.LABELS = {'default' : {
+   'train' : settings.modelname + "-train.csv",
+   'test'  : settings.modelname + "-test.csv",
+}}
 
 class NipsModel(Classispecies):
     
@@ -73,8 +81,33 @@ class NipsModel(Classispecies):
 #                    ncol+=1
 #                nrow+=1
         
+#model = NipsModel(analyser=settings.analyser, classifier=settings.classifier)
+#model.run()
+#model.dump_to_nips4b_submission()
+#model.save_to_db()
+
+# settings.analyser = "multiple"
+# settings.extract_mel   = False
+# settings.extract_dolog = False
+# settings.extract_dct   = False
+# settings.extract_fft2  = True
+# settings.extract_max  = False
+#    
+#    
+#     
+# settings.sec_segments = 0.5
+# settings.n_segments   = None
+# settings.MULTICORE = False
+# settings.FORCE_FEATXTRALL = True
+# settings.FORCE_FEATXTR = True
+#     
+# settings.FEATURE_ONEFILE_PLOT = True
+#     
+# for ds_ in [10, 32, 64]:
+#     settings.downscale_factor = ds_   
+#     model = NipsModel(analyser=settings.analyser, classifier=settings.classifier)
+#     model.run()
 
 
-model = NipsModel(analyser=settings.analyser, classifier=settings.classifier)
-model.run()
-model.dump_to_nips4b_submission()
+model = multirunner(NipsModel, [1.0, 5.0, None], iters=100)
+#model = multirunner(NipsModel, [1.0], iters=1)

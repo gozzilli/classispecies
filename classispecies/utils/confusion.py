@@ -1,44 +1,60 @@
 from collections import OrderedDict
-import matplotlib
+from classispecies import settings
+
+if not settings.is_mpl_backend_set():
+    settings.set_mpl_backend()
+
 from matplotlib import pyplot as plt
 import numpy as np
-import itertools
 
 
 class ConfusionMatrix(OrderedDict):
     def __init__(self, classes, class_names=None, *args, **kwds):
         OrderedDict.__init__(self, *args, **kwds)
         for class_ in classes:
-            self[class_] = OrderedDict()
+            self[str(class_)] = OrderedDict()
             for class__ in classes:
-                self[class_][class__] = 0
+                self[str(class_)][str(class__)] = 0
         self[-1] = {}
         self[-1][-1] = 0
         
         self.classes = classes
         self.nclasses = len(classes)
         self.class_names = class_names or classes
+        
  
     def __repr__(self):
         del self[-1]
-        out = ("    " + "%s  " * self.nclasses +"\n") % tuple(self.classes)
+        out = ("    " + "%3s  " * self.nclasses +"\n") % tuple(self.classes)
         for nclass in range(len(self.classes)):
             y = self.values()[nclass].values()
-            out += ("%s " + "%.2f " * self.nclasses +"\n") % tuple([self.class_names[nclass]] +
+            out += ("%3s " + "%.2f " * self.nclasses +"\n") % tuple([self.class_names[nclass]] +
+                list([float(x) if sum(y) > 0 else 0 for x in y])) 
+        self[-1] = {}
+        self[-1][-1] = 0
+        return out
+    
+    def toval(self):
+        del self[-1]
+        out = ("    " + "%3s  " * self.nclasses +"\n") % tuple(self.classes)
+        for nclass in range(len(self.classes)):
+            y = self.values()[nclass].values()
+            out += ("%3s " + "%.2f " * self.nclasses +"\n") % tuple([self.class_names[nclass]] +
                 list([float(x)/sum(y) if sum(y) > 0 else 0 for x in y])) 
         self[-1] = {}
         self[-1][-1] = 0
         return out
  
     def get_value(self, x, y):
-        if sum(self[x].values()) == 0:
+        if sum(self[str(x)].values()) == 0:
             return 0
         else:
-            return float(self[x][y])/sum(self[x].values())
+            return float(self[str(x)][str(y)])/sum(self[str(x)].values())
+            #return float(self[str(x)][str(y)])
         
     def add(self, true, pred):
         ''' add a prediction `pred` for the class `true` '''
-        self[true][pred] += 1
+        self[str(true)][str(pred)] += 1
  
     def plot(self, outputname=None):
         rcdef = plt.rcParams.copy()

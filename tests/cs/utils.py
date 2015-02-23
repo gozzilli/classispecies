@@ -1,18 +1,13 @@
-import sys, os
-from os.path import expanduser as home
-from tempfile import mkdtemp
-import re
-import gc
-import pandas as pd
+import os
 
-import numpy as np
 import scipy
 from scipy.io import wavfile
-from scipy.interpolate import interp1d
 
-from features import logfbank, fbank
+import numpy as np
+
 import wavio
-
+lengths = []
+fss     = []
 
 class NotAWaveFileError(Exception):
     def __init__(self, filename):
@@ -29,8 +24,8 @@ def make_axes2Dplot(data, signal, fs):
     matrix, x and y should be 41 elements each).
     '''
     
-    x = linspace(0, len(signal)/float(fs), data.shape[1])
-    y = linspace(0, fs/2, data.shape[0])
+    x = np.linspace(0, len(signal)/float(fs), data.shape[1])
+    y = np.linspace(0, fs/2, data.shape[0])
     
     return x,y
     

@@ -64,8 +64,8 @@ import matplotlib as mpl
 mpl.rcParams["font.family"] = "Segoe UI"
 mpl.rcParams["font.size"] = "15"
 
-def savedata(filename, obj):
-    np.savetxt(filename, obj, delimiter=",", fmt="%s", comments = '',
+def savedata(pdffilename, obj):
+    np.savetxt(pdffilename, obj, delimiter=",", fmt="%s", comments = '',
                header= ",".join(["label"] +
                                 #["mean%d" % x for x in range(NMFCCS-1)] +
                                 #["var%d"  % x for x in range(NMFCCS-1)] +
