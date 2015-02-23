@@ -1,6 +1,7 @@
 old
 features
 outputs
+outputs2
 *.pyc
 exec.log*
 grid.log
