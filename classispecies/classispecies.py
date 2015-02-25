@@ -338,6 +338,10 @@ class Classispecies(object):
 #         print ("LABELS TESTING shape:", labels_testing.shape)
 #         print ("PREDICT proba shape:", self.predict_proba.shape)
 #         print ("PREDICT proba uniq:", np.unique(self.predict_proba))
+
+        self.results["score"] = clf.score(data_testing, labels_testing)
+        logger.info (colored("score: %.3f" % self.results["score"]), RESULT)
+        
         
 
         if settings.MULTILABEL:
@@ -593,7 +597,7 @@ def multirunner(Model, sec_segments_array=[5.0],
 
     settings.DUMP_REPORT = False
     settings.FEATURES_PLOT = False
-    settings.FEATURE_ONEFILE_PLOT = True
+    settings.FEATURE_ONEFILE_PLOT = False
     #settings.RANDOM_SEED = None
     
     analysers   = ["multiple"]
@@ -601,7 +605,7 @@ def multirunner(Model, sec_segments_array=[5.0],
     mels        = [False, True]
     logs        = [False, True]
     dcts        = [False, True]
-    aggs        = [u"logmod", "mod", u"μ+σ", u"μ", "max",]
+    aggs        = [u"logmod", "mod", "mod0", u"μ+σ", u"μ", "max",]
     downscale_factors = [settings.downscale_factor]
     
     errors = []    
@@ -616,9 +620,11 @@ def multirunner(Model, sec_segments_array=[5.0],
                         for dct_ in dcts:
                             for agg_ in aggs:
                                                                 
-                                fft2_ = agg_ == "mod"
+                                fft2_ = agg_ in ["mod", "mod0", "logmod"]
                                 
                                 for ds_ in downscale_factors:
+                                    
+                                    ds_ = ds_ if agg_ in ["mod"] else None
                                     
                                     settings.FORCE_FEATXTR    = False
                                     settings.FORCE_FEATXTRALL = True
@@ -642,11 +648,13 @@ def multirunner(Model, sec_segments_array=[5.0],
                                             "analyser"         : analyser,
                                             "sec_segments"     : sec_segments,
                                             "downscale_factor" : ds_,
-                                            "agg"              : agg_,
+                                            "agg"              : agg_.encode('utf8'),
                                                                 }).count() > 0:
                                             logger.info(colored("Skipping %s" % an, WARNING))
                                             counter += iters
                                             continue
+                                        else:
+                                            pass
                                         
                                         print ("ANALYSER   %s" % an)
                                         print ("CLASSIFIER %s" % classifier)
@@ -666,38 +674,49 @@ def multirunner(Model, sec_segments_array=[5.0],
                                         settings.extract_dct   = dct_
                                         settings.extract_fft2  = fft2_
                                         settings.agg           = agg_
-                                        settings.downscale_factor = ds_ if agg_ == "mod" else None
+                                        settings.downscale_factor = ds_
                                          
                                         if agg_ == u"μ+σ":
                                             settings.extract_mean   = settings.extract_std = True
                                             settings.extract_max    = False
                                             settings.extract_fft2   = False
                                             settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
 
-                                        if agg_ == u"μ":
+                                        elif agg_ == u"μ":
                                             settings.extract_mean   = True
                                             settings.extract_max    = settings.extract_std = False
                                             settings.extract_fft2   = False
                                             settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
                                         
                                         elif agg_ == "max":
                                             settings.extract_mean   = settings.extract_std = False
                                             settings.extract_max    = True
                                             settings.extract_fft2   = False
                                             settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
                                         
                                         elif agg_ == "mod":
                                             settings.extract_mean   = settings.extract_std = settings.extract_max = False
                                             settings.extract_fft2   = True
                                             settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
                                         
                                         elif agg_ == "logmod":
                                             settings.extract_mean   = settings.extract_std = settings.extract_max = False
                                             settings.extract_fft2   = True
                                             settings.extract_logmod = True
+                                            settings.MOD_TAKE1BIN   = False
+                                        
+                                        elif agg_ == "mod0":
+                                            settings.extract_mean   = settings.extract_std = settings.extract_max = False
+                                            settings.extract_fft2   = True
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = True
                                         
                                         else:
-                                            raise ValueError("Not a valid aggregator")
+                                            raise ValueError(u"Not a valid aggregator: %s" % agg_)
         
                                         start = time.time()
 
@@ -705,7 +724,7 @@ def multirunner(Model, sec_segments_array=[5.0],
                                         truepred = []
                                         for i in range(iters):
                                             
-                                            settings.FEATURE_ONEFILE_PLOT = counter == 1
+                                            #settings.FEATURE_ONEFILE_PLOT = counter == 1
                                             
                                             if agg_ == "mod":
                                                 assert settings.extract_mean == settings.extract_std == settings.extract_max == False
@@ -770,10 +789,11 @@ def multirunner(Model, sec_segments_array=[5.0],
                                         print (eta)
 
                                         model.results = results
-                                        model.save_to_db()
+                                        if settings.SAVE_TO_DB:
+                                            model.save_to_db()
                                     except ValueError as e:
                                         errors.append("%d %s %s %s" % (counter, an, settings.modelname, e))
-                                        print (e)
+                                        print (unicode(e).encode('utf8'))
                                         #return model
                                         raise
                                         traceback.print_exc()

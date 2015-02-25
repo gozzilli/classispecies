@@ -8,7 +8,7 @@ settings.MULTILABEL = False
 settings.SPLIT_TRAINING_SET = True
 settings.FORCE_FEATXTR = True
 settings.FORCE_FEATXTRALL = True
-settings.MULTICORE = False
+settings.MULTICORE = True
 settings.n_segments = None
 settings.DUMP_REPORT = False
 settings.normalise = True
@@ -60,9 +60,9 @@ class UkOrthopteraModel(Classispecies):
 
 ### Multirun
 
-print "before importing", settings.downscale_factor
 from classispecies.classispecies import multirunner, multiextracter
-print "after importing", settings.downscale_factor
+
+settings.SAVE_TO_DB = True
 model = multirunner(UkOrthopteraModel, [2.0], iters=1)
 
 settings.SPLIT_TRAINING_SET = False

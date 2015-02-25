@@ -71,7 +71,9 @@ MULTILABEL          = True
 MODEL_BINARY        = False
 MULTICORE           = False
 DUMP_REPORT         = True
+SAVE_TO_DB          = False
 RANDOM_SEED         = 12345
+
 
 
 MPL_FORMAT      = "svg"

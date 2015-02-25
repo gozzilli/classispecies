@@ -113,16 +113,18 @@ class Nfc3SpeciesModel(Classispecies):
 class Nfc3SpeciesModelAll(Classispecies):
     pass
      
-# f1s = []
-# rocs   = []  
-# feat_imp = []
-# truepred = []
-# iters = 1
-# 
-# #     
-# # model = Nfc3SpeciesModel()
-# # model.featxtr()
-#      
+f1s = []
+rocs   = []  
+feat_imp = []
+truepred = []
+iters = 1
+ 
+#     
+# model = Nfc3SpeciesModel()
+# model.featxtr()
+
+# settings.SAVE_TO_DB = False
+#       
 # for i in range(iters):
 #     print i
 #     model = Nfc3SpeciesModel()
@@ -131,7 +133,7 @@ class Nfc3SpeciesModelAll(Classispecies):
 #     rocs.append(model.results["auc"])
 #     feat_imp.append(model.clf.feature_importances_)
 #     truepred.append(model.truepred)
-#            
+#             
 #     settings.FORCE_FEATXTR    = True
 #     settings.FORCE_FEATXTRALL = True
 #       
@@ -163,9 +165,15 @@ class Nfc3SpeciesModelAll(Classispecies):
       
  
 settings.CONFUSION_PLOT = False
-settings.FORCE_MULTIRUNNER_RECOMPUTE = True
-     
-model = multirunner(Nfc3SpeciesModelAll, [None], iters=1)
+settings.FORCE_MULTIRUNNER_RECOMPUTE = False
+ 
+settings.SAVE_TO_DB = True      
+model = multirunner(Nfc3SpeciesModel, [None], iters=1)
+
+# settings.SAVE_TO_DB = False
+# settings.FORCE_MULTIRUNNER_RECOMPUTE = True
+# settings.SPLIT_TRAINING_SET = True
+# model = multirunner(Nfc3SpeciesModelAll, [None], iters=1)
 
 # settings.SPLIT_TRAINING_SET = False
 # model = multiextracter(Nfc3SpeciesModel, [None, 1.0, 2.0], iters=1)

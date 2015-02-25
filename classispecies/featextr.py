@@ -218,7 +218,11 @@ class FeatureSet(object):
             
             if settings.MULTICORE:
                 for r in res:
-                    r.get()
+                    try:
+                        r.get()
+                    except:
+                        print (self.an)
+                        raise
                     
             res = []
             
@@ -632,26 +636,29 @@ def extract_multiple(signal, rate, normalise, soundfile):
         
         feat = usignal.half2Darray(np.abs(scipy.fft(feat, axis=0)), axis=0)
         
-        _shape_orig = feat.shape
-        
-        rate = float(rate)
-        secs  = len(signal)/rate
-        rate2 = rate/settings.NFFT1/2.
-        upper = settings.mod_cutoff * secs # number of samples in the first 50 Hz of the MOD
-        
-        if settings.extract_logmod:
-            feat = usignal.log_mod(feat, rate, settings.NFFT1)
-        else:
-            feat = usignal.downscale_spectrum(
-    #                     usignal.downscale_spectrum(
-                            feat[0:upper,:],
-    #                     settings.downscale_factor, axis=1),
-                   settings.downscale_factor, axis=0)
-            #print ("\ndownscaled by {}, feat size: {}x{} to {}x{}".format(settings.downscale_factor, *(_shape_orig+feat.shape)), end="")
-        
-        #feat = feat[0:8192,:]
         if settings.MOD_TAKE1BIN:
             feat = feat[0,:]
+        else:
+        
+            _shape_orig = feat.shape
+            
+            rate = float(rate)
+            secs  = len(signal)/rate
+            rate2 = rate/settings.NFFT1/2.
+            upper = settings.mod_cutoff * secs # number of samples in the first 50 Hz of the MOD
+            
+            if settings.extract_logmod:
+                feat = usignal.log_mod(feat, rate, settings.NFFT1)
+            else:
+                feat = usignal.downscale_spectrum(
+        #                     usignal.downscale_spectrum(
+                                feat[0:upper,:],
+        #                     settings.downscale_factor, axis=1),
+                       settings.downscale_factor, axis=0)
+                #print ("\ndownscaled by {}, feat size: {}x{} to {}x{}".format(settings.downscale_factor, *(_shape_orig+feat.shape)), end="")
+            
+            #feat = feat[0:8192,:]
+
         
     # TODO do consistency tests here
     
@@ -710,6 +717,6 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
         return feat
     except:
         print (soundfile, misc.get_an())
-        traceback.print_exc()
+        #traceback.print_exc()
         raise
         

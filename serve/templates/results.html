@@ -4,13 +4,43 @@
 
 {% block body %}
 <div id="container">
-  <input class="search" placeholder="Search" />
 
 	<table class="results" id="results">
 	    <thead>
-	    	<tr> 
+	    	<tr id='filter_table'>
+	    	{% for id_, elem in [("classifier", "Classifier"),
+	    						 ("chunks", "Chunks"),
+	    						 ("nfft1", "NFFT1"),
+	    						 ("ds", "DS"),
+	    						 ("mel", "Mel"),
+	    						 ("log", "Log"),
+	    						 ("dct", "DCT"),
+	    						 ("mod", "MOD"),
+	    						 ("mean", "μ"),
+	    						 ("std", "σ"),
+	    						 ("max", "Max"),
+	    						 ("agg", "Agg"),
+	    						 ("nfeat", "Features"),
+	    						 ("nsamples", "Samples"),
+	    						 ("score", "Score"),
+	    						 ("f1", "F1 score"),
+	    						 ("f1m", "F1 m"),
+	    						 ("roc", "ROC AUC"),
+	    						 ("rocm", "ROC m"),
+	    						 ("perc_correct", "% correct"),
+	    						 ("run_key", "run"),
+	    						] %}
+	    		<th class='{{id_}}' onclick="sortTable({{loop.index0}})">{{elem}}
+<!-- 	    		 <span onclick="sortTable({{loop.index0}})">&#9660;</span> -->
+	    			<br><input type='text' class='{{id_}}' size="1" style="width: 5ex"/>
+	    		</th>
+	    	
+	    	{% endfor %}
+	    	{#
+	    	</tr>
+	    	<tr id='filter_table'> 
 	<!--     		<th>Data set</th> -->
-	    		<th>Classifier</th>
+	    		<th class='classifier'>Classifier<br><input type='text' class='classifier' size=8/></th>
 	    		<th>Chunks</th>
 	    		<th>NFFT1</th>
 <!-- 	    		<th>NFFT2</th> -->
@@ -22,9 +52,10 @@
 	    		<th>&mu;</th>
 	    		<th>&sigma;</th>
 	    		<th>Max</th>
+	    		<th>Agg</th>
 	    		<th>Features</th>
 	    		<th>Samples</th>
-	    		<th id="f1">f1 score <span onclick="sortTable(14)">&#9660;</span></th>
+	    		<th class="f1">f1 score <span onclick="sortTable(14)">&#9660;</span></th>
 				<!-- <th>&sigma;(f1)</th> -->
 				<th>f1 merged</th>
 	    		<th>ROC AUC <span onclick="sortTable(16)">&#9660;</span></th>
@@ -32,6 +63,7 @@
 	    		<th>% correct</th>
 	    		<th>run</th>
 	    	</tr>
+	    	#}
 	    	
 	   	</thead>
 	    <tbody class="list">
@@ -39,27 +71,29 @@
 	    <tr>
 	<!-- 		<th>{{row.modelname}}</th> -->
 			<td class="classifier">{{row.classifier}}</td>
-			<td class="chunks">{{row.n_chunks}}</td>		
+			<td class="chunks">{% if row.n_chunks == "None" %}entire{% else %}{{row.n_chunks}}{% endif %}</td>		
 			<td>{{row.NFFT1}}</td>
-<!-- 			<td>{{row.NFFT2}}</td> -->
-			<td>{% if row.downscale_factor %}{{row.downscale_factor}}{% endif %}</td>
-			<td>{% if row.extract_mel %}&bull;{% endif %}</td>
-			<td>{% if row.extract_dolog %}&bull;{% endif %}</td>
-			<td>{% if row.extract_dct %}&bull;{% endif %}</td>
-			<td>{% if row.extract_fft2 %}&bull;{% endif %}</td>
-			<td>{% if row.extract_mean %}&bull;{% endif %}</td>
-			<td>{% if row.extract_std %}&bull;{% endif %}</td>
-			<td>{% if row.extract_max %}&bull;{% endif %}</td>
-			<td>{{ row.nfeatures }}</td>
-			<td>{{ row.nsamples }}</td>
-			<td id="f1">{% if row.f1 %}{{ "%.3f" % row.f1 }}{% endif %}</td>
-			<td>{% if row.f1_merged %}{{ "%.3f" % row.f1_merged }}{% endif %}</td>
+<!-- 			<td class="nfft2">{{row.NFFT2}}</td> -->
+			<td class="ds">{% if row.downscale_factor %}{{row.downscale_factor}}{% endif %}</td>
+			<td class="mel">{% if row.extract_mel %}&bull;{% else%}<span style="opacity:0;">n</span>{% endif %}</td>
+			<td class="log">{% if row.extract_dolog %}&bull;{% endif %}</td>
+			<td class="dct">{% if row.extract_dct %}&bull;{% endif %}</td>
+			<td class="mod">{% if row.extract_fft2 %}&bull;{% endif %}</td>
+			<td class="mean">{% if row.extract_mean %}&bull;{% endif %}</td>
+			<td class="std">{% if row.extract_std %}&bull;{% endif %}</td>
+			<td class="max">{% if row.extract_max %}&bull;{% endif %}</td>
+			<td class="agg">{% if row.agg %}{{ row.agg }}{% endif %}</td>
+			<td class="mfeat">{{ row.nfeatures }}</td>
+			<td class="nsamples">{{ row.nsamples }}</td>
+			<td class="score">{% if row.score %}{{ "%.3f" % row.score }}{% endif %}</td>
+			<td class="f1" id="f1">{% if row.f1 %}{{ "%.3f" % row.f1 }}{% endif %}</td>
+			<td class="f1m">{% if row.f1_merged %}{{ "%.3f" % row.f1_merged }}{% endif %}</td>
 	<!-- 		<td>{% if row.f1std %}{{ "%.3f" % row.f1std }}{% endif %}</td> -->
-			<td>{% if row.auc %}{{ "%.3f" % row.auc }}{% endif %}</td>
-			<td>{% if row.roc_merged %}{{ "%.3f" % row.roc_merged }}{% endif %}</td>
-			<td>{% if row.correct_percent %}{{ "%d" % row.correct_percent }}%{% endif %}</td>
+			<td class="roc">{% if row.auc %}{{ "%.3f" % row.auc }}{% endif %}</td>
+			<td class="rocm">{% if row.roc_merged %}{{ "%.3f" % row.roc_merged }}{% endif %}</td>
+			<td class="perc">{% if row.correct_percent %}{{ "%d" % row.correct_percent }}%{% endif %}</td>
 			<!--<td>{{ row._id }}</td> -->
-			<td title="{{ row.run_key }}"><a href="{{ url_for ('cs.serve_byid', model=row.modelname, guid=row.run_key) }}">{{ row.run_key }}</a></td>
+			<td class="run_key" title="{{ row.run_key }}"><a href="{{ url_for ('cs.serve_byid', model=row.modelname, guid=row.run_key) }}">{{ row.run_key }}</a></td>
 	    </tr>
 	    {% endfor %}
 	    </tbody>
@@ -85,7 +119,7 @@ function sortTable(col){
     store = null;
 }
 </script>
-<script src="http://listjs.com/no-cdn/list.js"></script>
+<!-- <script src="http://listjs.com/no-cdn/list.js"></script>
 
 <script type="text/javascript">
 	var options = {
@@ -93,6 +127,36 @@ function sortTable(col){
 	};
 
 	var fieldList = new List('container', options);
+</script>
+-->
+
+<script src="https://code.jquery.com/jquery-2.1.3.js"></script>
+<script type="text/javascript">
+var $rows = $('tbody > tr'),
+$filters = $('#filter_table input');
+
+$filters.on("keyup", function () {
+var $i = $filters.filter(function () {
+    return $.trim(this.value).length > 0;
+}),
+    len = $i.length;
+
+if (len === 0) return $rows.show();
+
+var cls = '.' + $i.map(function () {
+    return this.className
+}).get().join(',.');
+
+$rows.hide().filter(function () {
+    return $('td', this).filter(cls).filter(function () {
+        var content = this.textContent,
+            inputVal = $i.filter('.' + this.className).val();
+
+        return content.indexOf(inputVal) > -1;
+
+    }).length === len;
+}).show();
+});
 </script>
  
 {% endblock %}
