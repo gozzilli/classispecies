@@ -23,6 +23,7 @@
 	    						 ("nfeat", "Features"),
 	    						 ("nsamples", "Samples"),
 	    						 ("score", "Score"),
+	    						 ("cv_score", "CV"),
 	    						 ("f1", "F1 score"),
 	    						 ("f1m", "F1 m"),
 	    						 ("roc", "ROC AUC"),
@@ -86,6 +87,7 @@
 			<td class="mfeat">{{ row.nfeatures }}</td>
 			<td class="nsamples">{{ row.nsamples }}</td>
 			<td class="score">{% if row.score %}{{ "%.3f" % row.score }}{% endif %}</td>
+			<td class="cv_score">{% if row.cv_mean %}{{ "%.3f" % row.cv_mean }}{% endif %}</td>
 			<td class="f1" id="f1">{% if row.f1 %}{{ "%.3f" % row.f1 }}{% endif %}</td>
 			<td class="f1m">{% if row.f1_merged %}{{ "%.3f" % row.f1_merged }}{% endif %}</td>
 	<!-- 		<td>{% if row.f1std %}{{ "%.3f" % row.f1std }}{% endif %}</td> -->

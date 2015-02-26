@@ -108,6 +108,9 @@ class NipsModel(Classispecies):
 #     model = NipsModel(analyser=settings.analyser, classifier=settings.classifier)
 #     model.run()
 
+settings.downscale_factor = 50
+settings.FORCE_MULTIRUNNER_RECOMPUTE = False
+settings.SAVE_TO_DB = True
 
-model = multirunner(NipsModel, [1.0, 5.0, None], iters=100)
+model = multirunner(NipsModel, [None], iters=1)
 #model = multirunner(NipsModel, [1.0], iters=1)

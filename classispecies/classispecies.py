@@ -14,6 +14,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score, f1_score
 from sklearn.preprocessing import label_binarize
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.cross_validation import cross_val_score
+
 from termcolor import colored
 
 from featextr import FeatureSet
@@ -339,10 +341,6 @@ class Classispecies(object):
 #         print ("PREDICT proba shape:", self.predict_proba.shape)
 #         print ("PREDICT proba uniq:", np.unique(self.predict_proba))
 
-        self.results["score"] = clf.score(data_testing, labels_testing)
-        logger.info (colored("score: %.3f" % self.results["score"]), RESULT)
-        
-        
 
         if settings.MULTILABEL:
             try:
@@ -370,7 +368,19 @@ class Classispecies(object):
         
 
         if not self.missingTestLabels:
-
+            
+            self.results["score"] = clf.score(data_testing, labels_testing)
+            logger.info (colored("score: %.3f" % self.results["score"], RESULT))
+            
+            logger.info(colored("[%s] cross-validating..." % self.classifier, IMPORTANT))
+            cvdata = np.vstack( (data_training, data_testing) )
+            cvtruth = np.concatenate( (labels_training, labels_testing) )
+            cv_scores = cross_val_score(clf, cvdata, cvtruth, cv=10)
+            
+            self.results["cv_mean"] = cv_scores.mean()
+            self.results["cv_std"]  = cv_scores.std()
+            
+            
             if settings.MULTILABEL:
                 if settings.CLASSIF_PLOT: classif_plot(labels_testing, self.prediction)
 
@@ -466,7 +476,7 @@ class Classispecies(object):
                     e = np.array([self.classes[x] for x in np.argmax(self.res_, axis=1)])
                     f = self.unchunked_test_labels.astype("S2")
                     
-                    f1_merged = f1_score(f, e, average=None if len(np.unique(f)) == 2 else "weighted")
+                    f1_merged = f1_score(f, e, average=None if settings.MODEL_BINARY else "weighted")
                 
                 self.results["auc"] = auc
                 self.results["f1_merged"] = f1_merged
@@ -477,7 +487,7 @@ class Classispecies(object):
             self.res = res
 
             f1  = f1_score(labels_testing, self.prediction, 
-                           average=None if len(np.unique(labels_testing)) == 2 else "weighted")
+                           average=None if settings.MODEL_BINARY else "weighted")
             self.results["f1"]  = f1
 
             if settings.MULTILABEL:
@@ -501,10 +511,16 @@ class Classispecies(object):
             if settings.MODEL_BINARY:
                 logger.info (colored("F1 score: %s"  % f1, RESULT))
             else:
-                logger.info (colored("F1 score: %s %s" % ("%.3f" % f1  if f1  else "n/a",  "(merged: %s)" % ("%.3f" % f1_merged  if f1_merged  else "n/a")), RESULT))
-                logger.info (colored(" ROC AUC: %s %s" % ("%.3f" % auc if auc else "n/a", "(merged: %s)" % ("%.3f" % auc_merged if auc_merged else "n/a")), RESULT))
-                logger.info ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
-                
+                try:
+                    logger.info (colored("F1 score: %s %s" % ("%.3f" % f1  if f1  else "n/a",  "(merged: %s)" % ("%.3f" % f1_merged  if f1_merged  else "n/a")), RESULT))
+                    logger.info (colored(u"CV score: %.3f (σ=%.3f)" % (self.results.get("cv_mean", 0), self.results.get("cv_std", 0)), RESULT).encode('utf8'))
+                    logger.info (colored(" ROC AUC: %s %s" % ("%.3f" % auc if auc else "n/a", "(merged: %s)" % ("%.3f" % auc_merged if auc_merged else "n/a")), RESULT))
+                    logger.info ("correct %d/%d (%.3f%%)" % (self.results["correct"], self.results["total"], self.results["correct_percent"]))
+                except:
+                    print ("f1", f1)
+                    print ("roc", auc)
+                    raise
+                    
 
             
             
@@ -597,7 +613,7 @@ def multirunner(Model, sec_segments_array=[5.0],
 
     settings.DUMP_REPORT = False
     settings.FEATURES_PLOT = False
-    settings.FEATURE_ONEFILE_PLOT = False
+    #settings.FEATURE_ONEFILE_PLOT = False
     #settings.RANDOM_SEED = None
     
     analysers   = ["multiple"]
@@ -737,7 +753,8 @@ def multirunner(Model, sec_segments_array=[5.0],
                                                 rocs.append(results["auc"])
                                                 f1m.append (results["f1_merged" ])
                                                 rocm.append(results["roc_merged"])
-                                                truepred.append(model.truepred)
+                                                if not settings.MULTILABEL:
+                                                    truepred.append(model.truepred)
                                                 
                                                 settings.FORCE_FEATXTR    = False
                                                 settings.FORCE_FEATXTRALL = True

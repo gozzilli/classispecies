@@ -46,7 +46,7 @@ def rms_normalise(signal, feat):
         data:   the signal (generally the spectrogram of the audio signal)
     '''
     
-    _rms = np.sqrt(np.nanmean(np.square(signal)))
+    _rms = np.sqrt(np.nanmean(np.square(signal.astype('int32'))))
     return feat/_rms
 
 
@@ -185,8 +185,13 @@ def log_mod(mod, fs, nfft, nbins=48):
             z = np.nan_to_num(np.nanmean(mod[interpolatedBins[x-1]+1:interpolatedBins[x]+1,:], axis=0))
             
         mod_interpd[x,:] = z
-        
-    assert np.all(mod[0,:] == mod_interpd[0,:]), "The log mod is missing the original first bin."
+
+    try:        
+        assert np.all(mod[0,:] == mod_interpd[0,:]), "The log mod is missing the original first bin."
+    except:
+        np.save('/tmp/logmod.npy', mod_interpd)
+        np.save('/tmp/mod.npy', mod)
+        raise
         
     return mod_interpd
 

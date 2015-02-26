@@ -636,6 +636,11 @@ def extract_multiple(signal, rate, normalise, soundfile):
         
         feat = usignal.half2Darray(np.abs(scipy.fft(feat, axis=0)), axis=0)
         
+        if np.isnan(feat).any():
+            np.save('/tmp/signal.npy', signal)
+            np.save('/tmp/feat.npy', feat)
+            raise ValueError("Xe nan nel segnal")
+        
         if settings.MOD_TAKE1BIN:
             feat = feat[0,:]
         else:
