@@ -4,7 +4,7 @@ from classispecies import settings
 if not settings.is_mpl_backend_set():
     settings.set_mpl_backend()
 
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, rcParams, rc
 import numpy as np
 
 
@@ -58,12 +58,15 @@ class ConfusionMatrix(OrderedDict):
  
     def plot(self, outputname=None):
         rcdef = plt.rcParams.copy()
-        matplotlib.rcParams.update({
-                                    "savefig.bbox" : "tight",
-                                    "pgf.texsystem": "pdflatex",
-                                    "font.family": "Times New Roman",
-                                    "font.serif": ["Times"],
-                                    "font.size" : 27})
+        rcParams.update({
+            "savefig.bbox" : "tight",
+            "pgf.texsystem": "pdflatex",
+            "font.family": "Palatino",
+            #"font.serif": ["Times"],
+            "font.size" : 27, 
+        })
+                        
+        rc( "text", usetex=True)
         fig = plt.figure(figsize=(self.nclasses,self.nclasses))
         for i in range(self.nclasses):
             for j in range(self.nclasses):

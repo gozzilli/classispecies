@@ -21,7 +21,8 @@ from matplotlib import pyplot as plt
 from features import fbank, mfcc
 
 huyrc = matplotlib.rc_params_from_file('/home/dz2v07/.config/matplotlib/matplotlibrc.nocomment.huy')
-matplotlib.rcParams.update(huyrc)
+#matplotlib.rcParams.update(huyrc)
+matplotlib.rc('font', family='Palatino Linotype')
 
 from classispecies import settings
 settings.OUTPUT_DIR = '../outputs2'
@@ -492,6 +493,7 @@ def get_data(filename, mel, log, dct, agg, sec_segments=None, reshape=None, verb
     picklename = get_output_filename("%s-%s" % (mybasename(filename), params), 
                                      "multiple" + ("%.1f" %sec_segments if sec_segments else ""),
                                                modelname, "npy", removeext=False)
+    print picklename
     
     if verbose:
         print u"extracting {}".format(os.path.basename(picklename))
@@ -538,7 +540,7 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
     #hertz_spectrum = half2Darray(np.abs(stft_bysamples(signal, fs, frame_size, hop)))
     hertz_spectrum = stft_bysamples_optimised(signal, fs, frame_size, hop)
     
-    fig, axes = plt.subplots(7, 8, figsize=(40,30), dpi=150)
+    fig, axes = plt.subplots(7, 8, figsize=(40,25), dpi=150)
     fig.subplots_adjust(hspace=0.5, wspace=0.1)
     
 
@@ -559,7 +561,7 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                 row = 0
                 col = int(log)+2*int(dct)+4*int(mel)
                 
-                #print "%s %s%s%s" % (os.path.basename(filename), "mel" if mel else "hertz", "-log" if log else "", "-dct" if dct else "")
+                print "%s %s%s%s" % (os.path.basename(filename), "mel" if mel else "hertz", "-log" if log else "", "-dct" if dct else "")
                 
                 if mel:
                     feat = mel_spectrum.copy()
@@ -593,7 +595,7 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                     
                     mod_shape0 = numcep
                     
-                    appendEnergy = True
+                    appendEnergy = False
                     ceplifter = L = 22 # @UnusedVariable
                     
                     dct_ = scipy.fftpack.dct(feat, type=2, axis=1, norm='ortho')[:,:numcep]
@@ -624,16 +626,16 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                         nfeat = 40
                         y = np.arange(0, nfeat+1)
                     else:
-                        nfeat = 22
+                        nfeat = 32
                         y = np.linspace(0, fs/2./1000, d_feat.shape[0]+1)
                     
                     
                     
                 x = np.linspace(0, len(signal)/float(fs), d_feat.shape[1]+1)
-#                 print "d_feat.shape:", d_feat.shape
-#                 print "x.shape:     ", x.shape 
-#                 print "nfeat", nfeat
-#                 print make_title(mel, log, dct, feat)                
+                print "d_feat.shape:", d_feat.shape
+                print "x.shape:     ", x.shape 
+                print "nfeat", nfeat
+                print make_title(mel, log, dct, feat)                
 
                 if not log:
                     d_feat = 10*np.log10(d_feat)
@@ -647,14 +649,24 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                 _ = ax.set_title(make_title(mel, log, dct, feat))
                 _ = ax.set_xlabel(xlab)
                 _ = ax.set_ylabel(ylab) if col == 0 else None
-                _ = ax.grid(True)
+                #_ = ax.grid(True)
                     
                 ## MOD
                 
+                downscaled = 50
+                ncols = downscaled if downscaled else feat.shape[1]/2
+                    
+                
                 #mod_ = get_data(filename, mel, log, dct, "mod", reshape=(mod_shape0, 64))
-                #mod_ = 10*np.log10(half2Darray(np.abs(scipy.fft(feat, axis=1)), axis=1))
-                mod_ = get_data(filename, mel, log, dct, "mod", reshape=(nfeat, feat.shape[1]/2), verbose=True, modelname=modelname)
+                mod_ = 10*np.log10(half2Darray(np.abs(scipy.fft(feat[-nfeat:,], axis=1)), axis=1))
+                ### ideally revert to the method below eventually. Unfortunately
+                ### if that is rescaled by the featextr then it's not useful here 
+                #mod_ = get_data(filename, mel, log, dct, "mod", reshape=(nfeat, ncols), verbose=True, modelname=modelname)
                 d_mod_ = downscale_spectrum(mod_, 500)
+                
+                print "\n\nmod shape:", mod_.shape
+                print "feat shape:", feat.shape
+                print "d_mod_ shape:", d_mod_.shape, "\n\n" 
                 
                 row += 1
                 ax = axes[row, col]
@@ -663,7 +675,7 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                 _ = ax.set_title("MOD [{}x{}] [{}xd{}]".format(*(mod_.shape+d_mod_.shape)))
                 _ = ax.set_xlabel("Modulation freq (Hz)")
                 _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
-                _ = ax.grid(True)
+                #_ = ax.grid(True)
                 
                 
                 ## MOD 10
@@ -679,19 +691,21 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                 _ = ax.set_title("MOD10 [{}x{}] [{}xd{}]".format(*(mod10.shape+d_mod10.shape)))
                 _ = ax.set_xlabel("Modulation freq (Hz)")
                 _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
-                _ = ax.grid(True)                
+                #_ = ax.grid(True)                
 
                 
-                mod_logged = log_mod(mod_, fs, NFFT1, nbins=48)
+                nbins=48
+                mod_logged = log_mod(mod_.T, fs, NFFT1, nbins=nbins).T
                 ## LOG MOD
                 row += 1
                 ax = axes[row, col]
+                x = np.linspace(0, nbins, nbins+1)
                 _ = ax.pcolormesh(x, f_yaxis(mod_logged, start=START_FREQ), 10*np.log10(mod_logged), rasterized=True)
                 _ = ax.autoscale(tight=True)            
                 _ = ax.set_title("LOG MOD [{}x{}]".format(*mod_logged.shape))
-                _ = ax.set_xlabel("Modulation freq (Hz)")
+                _ = ax.set_xlabel("Modulation coefficient")
                 _ = ax.set_ylabel("Freq (kHz)") if col == 0 else None
-                _ = ax.grid(True)
+                #_ = ax.grid(True)
                 
                 
                 row += 1
@@ -705,11 +719,14 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
                 _ = ax.set_ylabel("Magnitude") if col == 0 else None
                 _ = ax.set_xlabel("Freq (kHz)")
                 
+                
                 row += 1
                 meanstd = get_data(filename, mel, log, dct, u"μ+σ", modelname=modelname)
                 assert len(meanstd) == 2*nfeat, "len(meanstd): %s, 2*nfeat: %s" % (str(len(meanstd)), str(2*nfeat))
                 mean_ = meanstd[nfeat:]
                 std_  = meanstd[:nfeat]
+                print "\n\nx shape:", x.shape
+                print "mean_shape", mean_.shape, "\n\n"
                 ax = axes[row, col]  
                 _ = ax.plot(x, mean_, label="$\mu$")
                 _ = ax.plot(x, std_, label="$\sigma$")
@@ -730,7 +747,7 @@ def gridplot4(filename, NFFT1, NFFT2, OVERLAP, datum, modelname="nfc3species"):
         
                 
             
-    make_suptitle(fig, datum, filename)
+    #make_suptitle(fig, datum, filename)
     
     return fig
     

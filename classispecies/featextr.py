@@ -605,7 +605,7 @@ def extract_multiple(signal, rate, normalise, soundfile):
         #feat = usignal.half2Darray(np.abs(usignal.stft_bysamples(signal, rate, frame_size, hop)))
         feat = usignal.stft_bysamples_optimised(signal, rate, frame_size, hop)
         #print ("feat shape", feat.shape)
-        assert feat.shape[1] == 32
+        assert feat.shape[1] == settings.NFFT1/2 # 128 # 32
         #print (feat.shape)
         filter_ = int(settings.highpass_cutoff/(rate)*settings.NFFT1)
         feat = feat[:,filter_:]
@@ -721,7 +721,7 @@ def exec_featextr(soundfile, signal, rate, analyser, picklename,
         
         return feat
     except:
-        print (soundfile, misc.get_an())
+        print ("ERROR", soundfile, misc.get_an())
         #traceback.print_exc()
         raise
         

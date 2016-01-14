@@ -4,7 +4,7 @@ from classispecies import settings
 from pandas import read_csv
 
 
-settings.modelname  = "nfc3species18"
+settings.modelname  = "nfc3species"
 settings.classifier = "decisiontree"
 settings.analyser   = "hertzfft" #"mel-filterbank" #"mfcc" #"hertz-spectrum"
 settings.MULTILABEL = False
@@ -166,14 +166,18 @@ iters = 1
  
 settings.CONFUSION_PLOT = False
 settings.FORCE_MULTIRUNNER_RECOMPUTE = False
- 
-settings.SAVE_TO_DB = True      
-model = multirunner(Nfc3SpeciesModel, [None], iters=1)
 
-# settings.SAVE_TO_DB = False
-# settings.FORCE_MULTIRUNNER_RECOMPUTE = True
-# settings.SPLIT_TRAINING_SET = True
-# model = multirunner(Nfc3SpeciesModelAll, [None], iters=1)
+
+# settings.SAVE_TO_DB = True
+# model = multirunner(Nfc3SpeciesModel, [None], iters=1)
+
+settings.SAVE_TO_DB = False
+settings.FORCE_MULTIRUNNER_RECOMPUTE = True
+settings.SPLIT_TRAINING_SET = True
+settings.FORCE_FEATXTR = True
+settings.FORCE_FEATXTRALL = True
+settings.NFFT1 = 256
+model = multirunner(Nfc3SpeciesModelAll, [None], iters=1)
 
 # settings.SPLIT_TRAINING_SET = False
 # model = multiextracter(Nfc3SpeciesModel, [None, 1.0, 2.0], iters=1)

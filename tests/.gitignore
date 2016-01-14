@@ -1,2 +1,4 @@
 *.pdf
 .ipynb_checkpoints*
+*.pyc
+outputs*

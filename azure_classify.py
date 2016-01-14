@@ -1,13 +1,11 @@
 import numpy as np
 
-from sklearn.ensemble import RandomForestClassifier
-from scipy.cluster.vq import vq, whiten, kmeans
 import scipy.io.wavfile as wav
 
 from features import mfcc
 
 import json
-import urllib2, urllib
+import urllib2
 from termcolor import colored
 
 NMFCCS = 13
@@ -34,7 +32,7 @@ def apply_workaround_bug11220():
     '''
     
     # BEGIN workaround for bug 11220 (http://bugs.python.org/issue11220)
-    import httplib, ssl, urllib2, socket
+    import httplib, ssl, socket
     class HTTPSConnectionV3(httplib.HTTPSConnection):
         def __init__(self, *args, **kwargs):
             httplib.HTTPSConnection.__init__(self, *args, **kwargs)
@@ -46,7 +44,7 @@ def apply_workaround_bug11220():
                 self._tunnel()
             try:
                 self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_SSLv3)
-            except ssl.SSLError, e:
+            except ssl.SSLError:
                 print("Trying SSLv3.")
                 self.sock = ssl.wrap_socket(sock, self.key_file, self.cert_file, ssl_version=ssl.PROTOCOL_SSLv23)
                 

@@ -309,7 +309,8 @@ class Classispecies(object):
         if self.classifier == "decisiontree":
             clf = DecisionTreeClassifier(random_state=settings.RANDOM_SEED)
         elif self.classifier == "randomforest":
-            clf = RandomForestClassifier(random_state=settings.RANDOM_SEED)
+            clf = RandomForestClassifier(random_state=settings.RANDOM_SEED, 
+                                         n_jobs=-1)
         else:
             raise Exception("Unknown classifier")
 
@@ -375,7 +376,7 @@ class Classispecies(object):
             logger.info(colored("[%s] cross-validating..." % self.classifier, IMPORTANT))
             cvdata = np.vstack( (data_training, data_testing) )
             cvtruth = np.concatenate( (labels_training, labels_testing) )
-            cv_scores = cross_val_score(clf, cvdata, cvtruth, cv=10)
+            cv_scores = cross_val_score(clf, cvdata, cvtruth, cv=10, n_jobs=-1)
             
             self.results["cv_mean"] = cv_scores.mean()
             self.results["cv_std"]  = cv_scores.std()
@@ -618,10 +619,15 @@ def multirunner(Model, sec_segments_array=[5.0],
     
     analysers   = ["multiple"]
     classifiers = ["decisiontree", "randomforest"]
-    mels        = [False, True]
-    logs        = [False, True]
-    dcts        = [False, True]
-    aggs        = [u"logmod", "mod", "mod0", u"μ+σ", u"μ", "max",]
+#     mels        = [False, True]
+#     logs        = [False, True]
+#     dcts        = [False, True]
+#     aggs        = [u"logmod", "mod", "mod0", u"μ+σ", u"μ", "max",]
+
+    mels        = [False]
+    logs        = [False]
+    dcts        = [False]
+    aggs        = ["mod0", u"μ+σ"]
     downscale_factors = [settings.downscale_factor]
     
     errors = []    
@@ -642,8 +648,8 @@ def multirunner(Model, sec_segments_array=[5.0],
                                     
                                     ds_ = ds_ if agg_ in ["mod"] else None
                                     
-                                    settings.FORCE_FEATXTR    = False
-                                    settings.FORCE_FEATXTRALL = True
+                                    settings.FORCE_FEATXTR    = True
+                                    settings.FORCE_FEATXTRALL = False
                                  
                                     try:
                                         print ("=" * 80)
@@ -843,6 +849,8 @@ def multiextracter(Model, sec_segments_array=[5.0],
     logs        = [False, True]
     dcts        = [False, True]
     aggs        = ["mod", u"μ+σ", "max"]
+    downscale_factors = [settings.downscale_factor]
+
     
     errors = []    
 
@@ -856,71 +864,107 @@ def multiextracter(Model, sec_segments_array=[5.0],
                         for dct_ in dcts:
                             for agg_ in aggs:
                                                                 
-                                fft2_ = agg_ == "mod"
+                                fft2_ = agg_ in ["mod", "mod0", "logmod"]
                                 
-                                if fft2_:
-                                    downscale_factors_ = [64]
-                                else:
-                                    downscale_factors_ = [None]
+                                for ds_ in downscale_factors:
                                     
-                                for ds_ in downscale_factors_:
+                                    ds_ = ds_ if agg_ in ["mod"] else None
                                     
-                                    settings.FORCE_FEATXTR    = True
+                                    settings.FORCE_FEATXTR    = False
                                     settings.FORCE_FEATXTRALL = True
                                  
-                                    print ("=" * 80)
-                                    print ("[%d/%d]" % (counter, total))
-                                    an = "%s%s%s%s%s%s" % ("mel" if mel_ else "hertz",
-                                                         " log" if log_ else "",
-                                                         " dct" if dct_ else "",
-                                                         " %s" % agg_ if agg_ else " no agg",
-                                                         " %.1fsec" % sec_segments if sec_segments else " entire",
-                                                         " %dds" % ds_ if ds_ else "")
-                                    
-                                    print ((u"ANALYSER   %s" % an).encode('utf8'))
-                                    print ("CLASSIFIER %s" % classifier)
-                                    print ("SEC SEGM   %s" % sec_segments)
-                                    print ("MEL        %s" % mel_)
-                                    print ("LOG        %s" % log_)
-                                    print ("DCT        %s" % dct_)
-                                    print ("MOD        %s" % fft2_)
-                                    print ((u"AGG        %s" % agg_).encode('utf8'))
-                                    print ("DOWNSCALE  %s" % ds_)
-                                     
-                                    settings.sec_segments  = sec_segments
-                                    settings.classifier    = classifier
-                                    settings.analyser      = analyser
-                                    settings.extract_mel   = mel_
-                                    settings.extract_dolog = log_
-                                    settings.extract_dct   = dct_
-                                    settings.extract_fft2  = fft2_
-                                    settings.agg           = agg_
-                                    settings.downscale_factor = ds_
-                                     
-                                    if agg_ == u"μ+σ":
-                                        settings.extract_mean = settings.extract_std = True
-                                        settings.extract_max = False
-                                    elif agg_ == "max":
-                                        settings.extract_mean = settings.extract_std = False
-                                        settings.extract_max = True
-                                    elif agg_ == "mod":
-                                        settings.extract_mean = settings.extract_std = settings.extract_max = False
-                                        settings.extract_fft2 = True
-                                    else:
-                                        raise ValueError("Not a valid aggregator")
-    
-                                    for i in range(iters):
+                                    try:
+                                        print ("=" * 80)
+                                        print ("[%d/%d]" % (counter, total))
+                                        an = "%s%s%s%s%s%s" % ("mel" if mel_ else "hertz",
+                                                             " log" if log_ else "",
+                                                             " dct" if dct_ else "",
+                                                             " %s" % agg_ if agg_ else " no agg",
+                                                             " %.1fsec" % sec_segments if sec_segments else " entire",
+                                                             " %dds" % ds_ if ds_ else "")
                                         
-                                        if agg_ == "mod":
-                                            assert settings.extract_mean == settings.extract_std == settings.extract_max == False
+                                        print ("ANALYSER   %s" % an)
+                                        print ("CLASSIFIER %s" % classifier)
+                                        print ("SEC SEGM   %ss" % sec_segments)
+                                        print ("MEL        %s" % mel_)
+                                        print ("LOG        %s" % log_)
+                                        print ("DCT        %s" % dct_)
+                                        print ("MOD        %s" % fft2_)
+                                        print (u"AGG        %s" % agg_)
+                                        print ("DOWNSCALE  %s" % ds_)
+                                         
+                                        settings.sec_segments  = sec_segments
+                                        settings.classifier    = classifier
+                                        settings.analyser      = analyser
+                                        settings.extract_mel   = mel_
+                                        settings.extract_dolog = log_
+                                        settings.extract_dct   = dct_
+                                        settings.extract_fft2  = fft2_
+                                        settings.agg           = agg_
+                                        settings.downscale_factor = ds_
+                                         
+                                        if agg_ == u"μ+σ":
+                                            settings.extract_mean   = settings.extract_std = True
+                                            settings.extract_max    = False
+                                            settings.extract_fft2   = False
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
+
+                                        elif agg_ == u"μ":
+                                            settings.extract_mean   = True
+                                            settings.extract_max    = settings.extract_std = False
+                                            settings.extract_fft2   = False
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
                                         
-                                        logger.info (colored( "%s [%d/%d] %s %d/%d" %(run_key, counter, total, an, i+1, iters), IMPORTANT))
-                                        model = Model()
-                                        try:
-                                            model.featxtr()
-                                        except TypeError:
-                                            pass
-                                        except ValueError:
-                                            pass
+                                        elif agg_ == "max":
+                                            settings.extract_mean   = settings.extract_std = False
+                                            settings.extract_max    = True
+                                            settings.extract_fft2   = False
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
+                                        
+                                        elif agg_ == "mod":
+                                            settings.extract_mean   = settings.extract_std = settings.extract_max = False
+                                            settings.extract_fft2   = True
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = False
+                                        
+                                        elif agg_ == "logmod":
+                                            settings.extract_mean   = settings.extract_std = settings.extract_max = False
+                                            settings.extract_fft2   = True
+                                            settings.extract_logmod = True
+                                            settings.MOD_TAKE1BIN   = False
+                                        
+                                        elif agg_ == "mod0":
+                                            settings.extract_mean   = settings.extract_std = settings.extract_max = False
+                                            settings.extract_fft2   = True
+                                            settings.extract_logmod = False
+                                            settings.MOD_TAKE1BIN   = True
+                                        
+                                        else:
+                                            raise ValueError(u"Not a valid aggregator: %s" % agg_)
+        
+                                        for i in range(iters):
+                                            
+                                            #settings.FEATURE_ONEFILE_PLOT = counter == 1
+                                            
+                                            if agg_ == "mod":
+                                                assert settings.extract_mean == settings.extract_std == settings.extract_max == False
+                                            
+                                            try: 
+                                                logger.info (colored( "%s [%d/%d] %s %d/%d" %(run_key, counter, total, an, i+1, iters), IMPORTANT))
+                                                model = Model()
+                                                model.featxtr()
+                                            except TypeError:
+                                                pass
+                                            except ValueError:
+                                                pass
                                         
                                         counter += 1
+                                    except Exception as e:
+                                        print ("Major error in %d %s %s" % (counter, an, settings.modelname))
+                                        print (e)
+                                        traceback.print_exc()
+                                        #return model
+                                        raise

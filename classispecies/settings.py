@@ -14,9 +14,7 @@ CLASSIF_PLOT    = False
 FEATURE_ONEFILE_PLOT = False # feature matrix of one file, before being compress to a vector
 
 def do_plot():
-    print "AAAAAAAAAAAAAAAAA"
     print SPECTR_PLOT, CONFUSION_PLOT, FEATURES_PLOT, IMPORTANCE_PLOT, TREE_PLOT, FEATURE_ONEFILE_PLOT
-    print "BBBBBBBBBBBBBBBBB"
     return any((SPECTR_PLOT, CONFUSION_PLOT, FEATURES_PLOT, IMPORTANCE_PLOT, TREE_PLOT, FEATURE_ONEFILE_PLOT))
 
 IS_MPL_BACKEND_SET = False
@@ -95,11 +93,6 @@ LABELS = {
 OUTPUT_DIR = 'outputs2' #'outputs'
 
 CLASSES         = [ 
-'chl',
-'fri',
-'bla',
-'syl',
-'car',
 ]
 NCLASSES        = len(CLASSES)
 NMFCCS          = 13 # number of MFCCs.
