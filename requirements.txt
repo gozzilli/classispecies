@@ -1,0 +1,13 @@
+yaml
+jinja2
+scipy
+numpy
+matplotlib
+ipython
+sklearn
+pandas
+pymongo
+termcolor
+
+# plus https://github.com/jameslyons/python_speech_features
+https://github.com/jameslyons/python_speech_features

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+apt-get install python-scipy python-numpy python-matplotlib python-yaml python-jinja2 ipython python-sklearn python-pandas python-pymongo python-termcolor
+
+# plus https://github.com/jameslyons/python_speech_features
+pip install https://github.com/jameslyons/python_speech_features

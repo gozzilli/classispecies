@@ -6,4 +6,5 @@ outputs2
 exec.log*
 grid.log
 *.log
-stowell
+stowell/
+tests/
